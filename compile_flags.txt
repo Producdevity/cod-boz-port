@@ -1,0 +1,10 @@
+--target=arm-linux-gnueabihf
+-std=c11
+-D_GNU_SOURCE
+-Iinclude
+-Wall
+-Wextra
+-Werror
+-march=armv7-a
+-mfpu=neon-vfpv4
+-mfloat-abi=hard
