@@ -154,12 +154,22 @@ static void frontend_cursor_gl_present(void) {
     }
     int x = g_pointer_x;
     int y = g_pointer_y;
+
+    const int outline_radius = 7;
+    const int outline_thickness = 3;
+    const int inner_radius = 5;
+    const int inner_thickness = 1;
+
     gl_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
-    cursor_clear_rect(x - 7, y - 1, 15, 3, gl_scissor, gl_clear);
-    cursor_clear_rect(x - 1, y - 7, 3, 15, gl_scissor, gl_clear);
+    cursor_clear_rect(x - outline_radius, y - outline_thickness / 2, outline_radius * 2 + 1,
+                      outline_thickness, gl_scissor, gl_clear);
+    cursor_clear_rect(x - outline_thickness / 2, y - outline_radius, outline_thickness,
+                      outline_radius * 2 + 1, gl_scissor, gl_clear);
     gl_clear_color(0.1f, 0.55f, 1.0f, 1.0f);
-    cursor_clear_rect(x - 5, y, 11, 1, gl_scissor, gl_clear);
-    cursor_clear_rect(x, y - 5, 1, 11, gl_scissor, gl_clear);
+    cursor_clear_rect(x - inner_radius, y - inner_thickness / 2, inner_radius * 2 + 1,
+                      inner_thickness, gl_scissor, gl_clear);
+    cursor_clear_rect(x - inner_thickness / 2, y - inner_radius, inner_thickness,
+                      inner_radius * 2 + 1, gl_scissor, gl_clear);
     gl_clear_color(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
     gl_scissor(scissor_box[0], scissor_box[1], scissor_box[2], scissor_box[3]);
     if (!scissor_was_enabled) {
