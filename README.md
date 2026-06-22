@@ -6,12 +6,12 @@ This repository contains only loader/source code and packaging scripts. Game dat
 
 ## Layout
 
-- `src/` and `include/`: loader/runtime source.
-- `packaging/CODBOZ.sh`: tracked PortMaster launcher script copied to the device.
-- `build/`: generated loader output; gitignored.
-- `Dockerfile`: pinned ARMHF build environment.
-- `scripts/build-docker.sh`: builds `build/codboz_s3e_loader` using Docker and the Makefile.
-- `scripts/deploy-muos.sh`: deploys the built loader and launcher to `muos-h` by default.
+- `src/`: loader and runtime source.
+- `include/`: runtime headers.
+- `packaging/`: PortMaster launcher files.
+- `scripts/`: build and deployment helpers.
+- `build/`: generated output; gitignored.
+- `Dockerfile`: ARMHF build environment.
 
 ## Build
 
@@ -21,14 +21,10 @@ scripts/build-docker.sh
 
 ## Deploy
 
-This script is for personal use with my setup for now, will make this a generic script later.
+After building, copy the loader and launcher to a muOS/PortMaster device reachable over SSH:
 
 ```bash
-scripts/deploy-muos.sh
+scripts/deploy-muos.sh <ssh-host>
 ```
 
-Use another SSH host by passing it as the first argument:
-
-```bash
-scripts/deploy-muos.sh muos-h
-```
+The host can also be provided with `CODBOZ_DEPLOY_HOST`.

@@ -3,7 +3,12 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-host="${1:-muos-h}"
+host="${1:-${CODBOZ_DEPLOY_HOST:-}}"
+if [ -z "$host" ]; then
+  echo "Usage: $0 <ssh-host>" >&2
+  echo "Or set CODBOZ_DEPLOY_HOST." >&2
+  exit 2
+fi
 loader="build/codboz_s3e_loader"
 launcher="packaging/CODBOZ.sh"
 

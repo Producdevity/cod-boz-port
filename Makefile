@@ -8,8 +8,13 @@ LDLIBS += -ldl -pthread
 
 SRC := \
   src/main.c \
+  src/s3e_config.c \
+  src/s3e_file.c \
+  src/s3e_gl.c \
   src/s3e_host.c \
-  src/s3e_image.c
+  src/s3e_image.c \
+  src/s3e_input.c \
+  src/s3e_runtime.c
 OBJ := $(SRC:src/%.c=$(BUILD_DIR)/%.o)
 
 all: $(TARGET)
