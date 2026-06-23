@@ -1,8 +1,5 @@
 #include "s3e_host_internal.h"
 
-#include <linux/fb.h>
-#include <sys/ioctl.h>
-
 #define GL_WRAP_FLOAT1(name, t1)                                                                   \
     static S3E_SOFTFP void host_##name(t1 a) {                                                     \
         void (*real)(t1) = lookup_gl(#name);                                                       \
@@ -57,127 +54,389 @@ GL_WRAP_FLOAT3(glTranslatef, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT2(glUniform1f, GLint, GLfloat)
 GL_WRAP_FLOAT4(glUniform4f, GLint, GLfloat, GLfloat, GLfloat)
 
-struct fb_page_sync {
-    int state;
-    int fd;
-    uint8_t *pixels;
-    size_t map_size;
-    uint32_t line_length;
-    uint32_t page_count;
-    uint32_t visible_height;
-    uint32_t virtual_height;
-    size_t page_bytes;
-};
-
 enum {
-    FB_PAGE_SYNC_UNTRIED = 0,
-    FB_PAGE_SYNC_READY = 1,
-    FB_PAGE_SYNC_UNSUPPORTED = 2,
+    GL_TEXTURE_2D_VALUE = 0x0de1,
+    GL_BLEND_VALUE = 0x0be2,
+    GL_ALPHA_TEST_VALUE = 0x0bc0,
+    GL_DEPTH_TEST_VALUE = 0x0b71,
+    GL_CULL_FACE_VALUE = 0x0b44,
+    GL_FOG_VALUE = 0x0b60,
+    GL_LIGHTING_VALUE = 0x0b50,
+    GL_STENCIL_TEST_VALUE = 0x0b90,
+    GL_VERTEX_ARRAY_VALUE = 0x8074,
+    GL_NORMAL_ARRAY_VALUE = 0x8075,
+    GL_COLOR_ARRAY_VALUE = 0x8076,
+    GL_TEXTURE_COORD_ARRAY_VALUE = 0x8078,
+    GL_TEXTURE_BINDING_2D_VALUE = 0x8069,
+    GL_TEXTURE_MIN_FILTER_VALUE = 0x2801,
+    GL_TEXTURE_MAG_FILTER_VALUE = 0x2800,
+    GL_TEXTURE_WRAP_S_VALUE = 0x2802,
+    GL_TEXTURE_WRAP_T_VALUE = 0x2803,
+    GL_CLAMP_TO_EDGE_VALUE = 0x812f,
+    GL_LINEAR_VALUE = 0x2601,
+    GL_RGBA_VALUE = 0x1908,
+    GL_UNSIGNED_BYTE_VALUE = 0x1401,
+    GL_FLOAT_VALUE = 0x1406,
+    GL_TRIANGLE_STRIP_VALUE = 0x0005,
+    GL_PACK_ALIGNMENT_VALUE = 0x0d05,
+    GL_UNPACK_ALIGNMENT_VALUE = 0x0cf5,
+    GL_VIEWPORT_VALUE = 0x0ba2,
+    GL_MATRIX_MODE_VALUE = 0x0ba0,
+    GL_MODELVIEW_VALUE = 0x1700,
+    GL_PROJECTION_VALUE = 0x1701,
+    GL_CURRENT_COLOR_VALUE = 0x0b00,
+    GL_COLOR_WRITEMASK_VALUE = 0x0c23,
+    GL_ACTIVE_TEXTURE_VALUE = 0x84e0,
+    GL_CLIENT_ACTIVE_TEXTURE_VALUE = 0x84e1,
+    GL_TEXTURE0_VALUE = 0x84c0,
+    GL_ARRAY_BUFFER_BINDING_VALUE = 0x8894,
+    GL_ARRAY_BUFFER_VALUE = 0x8892,
+    GL_TEXTURE_ENV_VALUE = 0x2300,
+    GL_TEXTURE_ENV_MODE_VALUE = 0x2200,
+    GL_REPLACE_VALUE = 0x1e01,
 };
 
-static struct fb_page_sync g_fb_page_sync = {
-    .fd = -1,
+struct backbuffer_preserve {
+    uint8_t *pixels;
+    size_t pixels_size;
+    GLsizei width;
+    GLsizei height;
+    GLsizei texture_width;
+    GLsizei texture_height;
+    GLuint texture;
+    int texture_allocated;
+    int ready;
 };
 
-static void fb_page_sync_close(int retry) {
-    if (g_fb_page_sync.pixels) {
-        munmap(g_fb_page_sync.pixels, g_fb_page_sync.map_size);
+static struct backbuffer_preserve g_backbuffer_preserve;
+
+static GLsizei next_power_of_two(GLsizei value) {
+    uint32_t out = 1;
+    while (out < (uint32_t)value && out <= UINT32_MAX / 2) {
+        out <<= 1;
     }
-    if (g_fb_page_sync.fd >= 0) {
-        close(g_fb_page_sync.fd);
-    }
-    memset(&g_fb_page_sync, 0, sizeof(g_fb_page_sync));
-    g_fb_page_sync.fd = -1;
-    g_fb_page_sync.state = retry ? FB_PAGE_SYNC_UNTRIED : FB_PAGE_SYNC_UNSUPPORTED;
+    return (GLsizei)out;
 }
 
-static int fb_page_sync_open(void) {
-    if (g_fb_page_sync.state == FB_PAGE_SYNC_READY) {
-        return g_fb_page_sync.fd >= 0;
-    }
-    if (g_fb_page_sync.state == FB_PAGE_SYNC_UNSUPPORTED) {
+static int preserve_resize(GLsizei width, GLsizei height) {
+    if (width <= 0 || height <= 0) {
         return 0;
     }
-    g_fb_page_sync.fd = -1;
-
-    int fd = open("/dev/fb0", O_RDWR | O_CLOEXEC);
-    if (fd < 0) {
-        g_fb_page_sync.state = FB_PAGE_SYNC_UNSUPPORTED;
+    uint64_t required = (uint64_t)width * (uint64_t)height * 4u;
+    if (required == 0 || required > SIZE_MAX) {
         return 0;
     }
 
-    struct fb_var_screeninfo var;
-    struct fb_fix_screeninfo fix;
-    if (ioctl(fd, FBIOGET_VSCREENINFO, &var) != 0 || ioctl(fd, FBIOGET_FSCREENINFO, &fix) != 0 ||
-        var.yres == 0 || var.yres_virtual < var.yres * 2 || fix.line_length == 0 ||
-        fix.smem_len == 0) {
-        close(fd);
-        g_fb_page_sync.state = FB_PAGE_SYNC_UNSUPPORTED;
-        return 0;
+    if (g_backbuffer_preserve.pixels_size != (size_t)required) {
+        uint8_t *pixels = realloc(g_backbuffer_preserve.pixels, (size_t)required);
+        if (!pixels) {
+            g_backbuffer_preserve.ready = 0;
+            free(g_backbuffer_preserve.pixels);
+            memset(&g_backbuffer_preserve, 0, sizeof(g_backbuffer_preserve));
+            return 0;
+        }
+        g_backbuffer_preserve.pixels = pixels;
+        g_backbuffer_preserve.pixels_size = (size_t)required;
     }
 
-    uint64_t required_size = (uint64_t)fix.line_length * var.yres_virtual;
-    if (required_size > fix.smem_len || required_size > SIZE_MAX) {
-        close(fd);
-        g_fb_page_sync.state = FB_PAGE_SYNC_UNSUPPORTED;
-        return 0;
+    if (g_backbuffer_preserve.width != width || g_backbuffer_preserve.height != height) {
+        g_backbuffer_preserve.texture_allocated = 0;
+        g_backbuffer_preserve.texture_width = next_power_of_two(width);
+        g_backbuffer_preserve.texture_height = next_power_of_two(height);
     }
-
-    uint8_t *pixels = mmap(NULL, (size_t)fix.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (pixels == MAP_FAILED) {
-        close(fd);
-        g_fb_page_sync.state = FB_PAGE_SYNC_UNSUPPORTED;
-        return 0;
-    }
-
-    uint32_t page_count = var.yres_virtual / var.yres;
-
-    g_fb_page_sync.state = FB_PAGE_SYNC_READY;
-    g_fb_page_sync.fd = fd;
-    g_fb_page_sync.pixels = pixels;
-    g_fb_page_sync.map_size = (size_t)fix.smem_len;
-    g_fb_page_sync.line_length = fix.line_length;
-    g_fb_page_sync.page_count = page_count;
-    g_fb_page_sync.visible_height = var.yres;
-    g_fb_page_sync.virtual_height = var.yres_virtual;
-    g_fb_page_sync.page_bytes = (size_t)fix.line_length * var.yres;
+    g_backbuffer_preserve.width = width;
+    g_backbuffer_preserve.height = height;
     return 1;
 }
 
-static void sync_framebuffer_pages(void) {
-    if (!fb_page_sync_open()) {
+static void preserve_capture_frame(void) {
+    GLsizei width = g_native_window.width;
+    GLsizei height = g_native_window.height;
+    if (!preserve_resize(width, height)) {
         return;
     }
 
-    struct fb_var_screeninfo var;
-    if (ioctl(g_fb_page_sync.fd, FBIOGET_VSCREENINFO, &var) != 0 ||
-        var.yres != g_fb_page_sync.visible_height ||
-        var.yres_virtual != g_fb_page_sync.virtual_height) {
-        fb_page_sync_close(1);
+    void (*gl_read_pixels)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *) =
+        lookup_gl("glReadPixels");
+    void (*gl_pixel_storei)(GLenum, GLint) = lookup_gl("glPixelStorei");
+    void (*gl_get_integerv)(GLenum, GLint *) = lookup_gl("glGetIntegerv");
+    if (!gl_read_pixels) {
+        g_backbuffer_preserve.ready = 0;
         return;
     }
 
-    uint32_t current_y = var.yoffset;
-    if (current_y % g_fb_page_sync.visible_height != 0) {
-        return;
+    GLint pack_alignment = 4;
+    if (gl_get_integerv) {
+        gl_get_integerv(GL_PACK_ALIGNMENT_VALUE, &pack_alignment);
+    }
+    if (gl_pixel_storei) {
+        gl_pixel_storei(GL_PACK_ALIGNMENT_VALUE, 1);
+    }
+    gl_read_pixels(0, 0, width, height, GL_RGBA_VALUE, GL_UNSIGNED_BYTE_VALUE,
+                   g_backbuffer_preserve.pixels);
+    if (gl_pixel_storei) {
+        gl_pixel_storei(GL_PACK_ALIGNMENT_VALUE, pack_alignment);
+    }
+    g_backbuffer_preserve.ready = 1;
+}
+
+static GLboolean gl_cap_enabled(GLenum cap, GLboolean (*gl_is_enabled)(GLenum)) {
+    return gl_is_enabled ? gl_is_enabled(cap) : 0;
+}
+
+static void restore_gl_cap(GLenum cap, GLboolean enabled, void (*gl_enable)(GLenum),
+                           void (*gl_disable)(GLenum)) {
+    if (enabled) {
+        gl_enable(cap);
+    } else {
+        gl_disable(cap);
+    }
+}
+
+static int preserve_upload_texture(void) {
+    void (*gl_gen_textures)(GLsizei, GLuint *) = lookup_gl("glGenTextures");
+    void (*gl_bind_texture)(GLenum, GLuint) = lookup_gl("glBindTexture");
+    void (*gl_tex_parameteri)(GLenum, GLenum, GLint) = lookup_gl("glTexParameteri");
+    void (*gl_tex_image_2d)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum,
+                            const void *) = lookup_gl("glTexImage2D");
+    void (*gl_tex_sub_image_2d)(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum,
+                                const void *) = lookup_gl("glTexSubImage2D");
+    if (!gl_gen_textures || !gl_bind_texture || !gl_tex_parameteri || !gl_tex_image_2d ||
+        !gl_tex_sub_image_2d) {
+        return 0;
     }
 
-    size_t source = (size_t)current_y * g_fb_page_sync.line_length;
-    if (current_y + g_fb_page_sync.visible_height > g_fb_page_sync.virtual_height ||
-        source + g_fb_page_sync.page_bytes > g_fb_page_sync.map_size) {
-        return;
-    }
-
-    for (uint32_t page = 0; page < g_fb_page_sync.page_count; ++page) {
-        uint32_t dest_y = page * g_fb_page_sync.visible_height;
-        if (dest_y == current_y) {
-            continue;
+    if (!g_backbuffer_preserve.texture) {
+        gl_gen_textures(1, &g_backbuffer_preserve.texture);
+        if (!g_backbuffer_preserve.texture) {
+            return 0;
         }
-        size_t dest = (size_t)dest_y * g_fb_page_sync.line_length;
-        if (dest + g_fb_page_sync.page_bytes <= g_fb_page_sync.map_size) {
-            memcpy(g_fb_page_sync.pixels + dest, g_fb_page_sync.pixels + source,
-                   g_fb_page_sync.page_bytes);
+        g_backbuffer_preserve.texture_allocated = 0;
+    }
+
+    gl_bind_texture(GL_TEXTURE_2D_VALUE, g_backbuffer_preserve.texture);
+    if (!g_backbuffer_preserve.texture_allocated) {
+        gl_tex_parameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_MIN_FILTER_VALUE, GL_LINEAR_VALUE);
+        gl_tex_parameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_MAG_FILTER_VALUE, GL_LINEAR_VALUE);
+        gl_tex_parameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_WRAP_S_VALUE, GL_CLAMP_TO_EDGE_VALUE);
+        gl_tex_parameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_WRAP_T_VALUE, GL_CLAMP_TO_EDGE_VALUE);
+        gl_tex_image_2d(GL_TEXTURE_2D_VALUE, 0, GL_RGBA_VALUE,
+                        g_backbuffer_preserve.texture_width,
+                        g_backbuffer_preserve.texture_height, 0, GL_RGBA_VALUE,
+                        GL_UNSIGNED_BYTE_VALUE, NULL);
+        g_backbuffer_preserve.texture_allocated = 1;
+    }
+
+    gl_tex_sub_image_2d(GL_TEXTURE_2D_VALUE, 0, 0, 0, g_backbuffer_preserve.width,
+                        g_backbuffer_preserve.height, GL_RGBA_VALUE, GL_UNSIGNED_BYTE_VALUE,
+                        g_backbuffer_preserve.pixels);
+    return 1;
+}
+
+static void preserve_restore_frame(void) {
+    if (!g_backbuffer_preserve.ready) {
+        return;
+    }
+
+    void (*gl_enable)(GLenum) = lookup_gl("glEnable");
+    void (*gl_disable)(GLenum) = lookup_gl("glDisable");
+    GLboolean (*gl_is_enabled)(GLenum) = lookup_gl("glIsEnabled");
+    void (*gl_get_integerv)(GLenum, GLint *) = lookup_gl("glGetIntegerv");
+    void (*gl_get_floatv)(GLenum, GLfloat *) = lookup_gl("glGetFloatv");
+    void (*gl_get_booleanv)(GLenum, GLboolean *) = lookup_gl("glGetBooleanv");
+    void (*gl_color_mask)(GLboolean, GLboolean, GLboolean, GLboolean) =
+        lookup_gl("glColorMask");
+    void (*gl_viewport)(GLint, GLint, GLsizei, GLsizei) = lookup_gl("glViewport");
+    void (*gl_matrix_mode)(GLenum) = lookup_gl("glMatrixMode");
+    void (*gl_push_matrix)(void) = lookup_gl("glPushMatrix");
+    void (*gl_pop_matrix)(void) = lookup_gl("glPopMatrix");
+    void (*gl_load_identity)(void) = lookup_gl("glLoadIdentity");
+    void (*gl_orthof)(GLfloat, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat) =
+        lookup_gl("glOrthof");
+    void (*gl_color4f)(GLfloat, GLfloat, GLfloat, GLfloat) = lookup_gl("glColor4f");
+    void (*gl_enable_client_state)(GLenum) = lookup_gl("glEnableClientState");
+    void (*gl_disable_client_state)(GLenum) = lookup_gl("glDisableClientState");
+    void (*gl_vertex_pointer)(GLint, GLenum, GLsizei, const void *) = lookup_gl("glVertexPointer");
+    void (*gl_tex_coord_pointer)(GLint, GLenum, GLsizei, const void *) =
+        lookup_gl("glTexCoordPointer");
+    void (*gl_draw_arrays)(GLenum, GLint, GLsizei) = lookup_gl("glDrawArrays");
+    void (*gl_bind_texture)(GLenum, GLuint) = lookup_gl("glBindTexture");
+    void (*gl_pixel_storei)(GLenum, GLint) = lookup_gl("glPixelStorei");
+    void (*gl_active_texture)(GLenum) = lookup_gl("glActiveTexture");
+    void (*gl_client_active_texture)(GLenum) = lookup_gl("glClientActiveTexture");
+    void (*gl_bind_buffer)(GLenum, GLuint) = lookup_gl("glBindBuffer");
+    void (*gl_tex_envi)(GLenum, GLenum, GLint) = lookup_gl("glTexEnvi");
+    void (*gl_get_tex_enviv)(GLenum, GLenum, GLint *) = lookup_gl("glGetTexEnviv");
+
+    if (!gl_enable || !gl_disable || !gl_is_enabled || !gl_get_integerv || !gl_get_floatv ||
+        !gl_get_booleanv || !gl_color_mask || !gl_viewport || !gl_matrix_mode ||
+        !gl_push_matrix || !gl_pop_matrix || !gl_load_identity || !gl_orthof || !gl_color4f ||
+        !gl_enable_client_state || !gl_disable_client_state || !gl_vertex_pointer ||
+        !gl_tex_coord_pointer || !gl_draw_arrays || !gl_bind_texture) {
+        return;
+    }
+
+    GLboolean texture_2d = gl_cap_enabled(GL_TEXTURE_2D_VALUE, gl_is_enabled);
+    GLboolean blend = gl_cap_enabled(GL_BLEND_VALUE, gl_is_enabled);
+    GLboolean alpha_test = gl_cap_enabled(GL_ALPHA_TEST_VALUE, gl_is_enabled);
+    GLboolean depth_test = gl_cap_enabled(GL_DEPTH_TEST_VALUE, gl_is_enabled);
+    GLboolean cull_face = gl_cap_enabled(GL_CULL_FACE_VALUE, gl_is_enabled);
+    GLboolean fog = gl_cap_enabled(GL_FOG_VALUE, gl_is_enabled);
+    GLboolean lighting = gl_cap_enabled(GL_LIGHTING_VALUE, gl_is_enabled);
+    GLboolean stencil_test = gl_cap_enabled(GL_STENCIL_TEST_VALUE, gl_is_enabled);
+    GLboolean scissor_test = gl_cap_enabled(GL_SCISSOR_TEST_VALUE, gl_is_enabled);
+    GLboolean vertex_array = gl_cap_enabled(GL_VERTEX_ARRAY_VALUE, gl_is_enabled);
+    GLboolean texcoord_array = gl_cap_enabled(GL_TEXTURE_COORD_ARRAY_VALUE, gl_is_enabled);
+    GLboolean color_array = gl_cap_enabled(GL_COLOR_ARRAY_VALUE, gl_is_enabled);
+    GLboolean normal_array = gl_cap_enabled(GL_NORMAL_ARRAY_VALUE, gl_is_enabled);
+
+    GLint texture_binding = 0;
+    GLint viewport[4] = {0, 0, g_backbuffer_preserve.width, g_backbuffer_preserve.height};
+    GLint matrix_mode = GL_MODELVIEW_VALUE;
+    GLint unpack_alignment = 4;
+    GLint active_texture = GL_TEXTURE0_VALUE;
+    GLint client_active_texture = GL_TEXTURE0_VALUE;
+    GLint array_buffer = 0;
+    GLint texture_env_mode = GL_REPLACE_VALUE;
+    int texture_env_saved = gl_get_tex_enviv && gl_tex_envi;
+    GLfloat color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    GLboolean color_mask[4] = {1, 1, 1, 1};
+
+    gl_get_integerv(GL_TEXTURE_BINDING_2D_VALUE, &texture_binding);
+    gl_get_integerv(GL_VIEWPORT_VALUE, viewport);
+    gl_get_integerv(GL_MATRIX_MODE_VALUE, &matrix_mode);
+    gl_get_integerv(GL_UNPACK_ALIGNMENT_VALUE, &unpack_alignment);
+    gl_get_floatv(GL_CURRENT_COLOR_VALUE, color);
+    gl_get_booleanv(GL_COLOR_WRITEMASK_VALUE, color_mask);
+    if (gl_active_texture) {
+        gl_get_integerv(GL_ACTIVE_TEXTURE_VALUE, &active_texture);
+        gl_active_texture(GL_TEXTURE0_VALUE);
+    }
+    if (gl_client_active_texture) {
+        gl_get_integerv(GL_CLIENT_ACTIVE_TEXTURE_VALUE, &client_active_texture);
+        gl_client_active_texture(GL_TEXTURE0_VALUE);
+    }
+    if (gl_bind_buffer) {
+        gl_get_integerv(GL_ARRAY_BUFFER_BINDING_VALUE, &array_buffer);
+        gl_bind_buffer(GL_ARRAY_BUFFER_VALUE, 0);
+    }
+    if (texture_env_saved) {
+        gl_get_tex_enviv(GL_TEXTURE_ENV_VALUE, GL_TEXTURE_ENV_MODE_VALUE, &texture_env_mode);
+    }
+
+    if (gl_pixel_storei) {
+        gl_pixel_storei(GL_UNPACK_ALIGNMENT_VALUE, 1);
+    }
+    if (!preserve_upload_texture()) {
+        if (gl_pixel_storei) {
+            gl_pixel_storei(GL_UNPACK_ALIGNMENT_VALUE, unpack_alignment);
         }
+        gl_bind_texture(GL_TEXTURE_2D_VALUE, (GLuint)texture_binding);
+        if (gl_active_texture) {
+            gl_active_texture((GLenum)active_texture);
+        }
+        if (gl_client_active_texture) {
+            gl_client_active_texture((GLenum)client_active_texture);
+        }
+        if (gl_bind_buffer) {
+            gl_bind_buffer(GL_ARRAY_BUFFER_VALUE, (GLuint)array_buffer);
+        }
+        return;
+    }
+    if (gl_pixel_storei) {
+        gl_pixel_storei(GL_UNPACK_ALIGNMENT_VALUE, unpack_alignment);
+    }
+
+    const GLfloat tex_right =
+        (GLfloat)g_backbuffer_preserve.width / (GLfloat)g_backbuffer_preserve.texture_width;
+    const GLfloat tex_top =
+        (GLfloat)g_backbuffer_preserve.height / (GLfloat)g_backbuffer_preserve.texture_height;
+    const GLfloat vertices[] = {
+        0.0f,
+        0.0f,
+        (GLfloat)g_backbuffer_preserve.width,
+        0.0f,
+        0.0f,
+        (GLfloat)g_backbuffer_preserve.height,
+        (GLfloat)g_backbuffer_preserve.width,
+        (GLfloat)g_backbuffer_preserve.height,
+    };
+    const GLfloat texcoords[] = {
+        0.0f, 0.0f, tex_right, 0.0f, 0.0f, tex_top, tex_right, tex_top,
+    };
+
+    gl_disable(GL_SCISSOR_TEST_VALUE);
+    gl_disable(GL_BLEND_VALUE);
+    gl_disable(GL_ALPHA_TEST_VALUE);
+    gl_disable(GL_DEPTH_TEST_VALUE);
+    gl_disable(GL_CULL_FACE_VALUE);
+    gl_disable(GL_FOG_VALUE);
+    gl_disable(GL_LIGHTING_VALUE);
+    gl_disable(GL_STENCIL_TEST_VALUE);
+    gl_enable(GL_TEXTURE_2D_VALUE);
+    gl_color_mask(1, 1, 1, 1);
+    gl_color4f(1.0f, 1.0f, 1.0f, 1.0f);
+    if (texture_env_saved) {
+        gl_tex_envi(GL_TEXTURE_ENV_VALUE, GL_TEXTURE_ENV_MODE_VALUE, GL_REPLACE_VALUE);
+    }
+
+    gl_viewport(0, 0, g_backbuffer_preserve.width, g_backbuffer_preserve.height);
+    gl_matrix_mode(GL_PROJECTION_VALUE);
+    gl_push_matrix();
+    gl_load_identity();
+    gl_orthof(0.0f, (GLfloat)g_backbuffer_preserve.width, 0.0f,
+              (GLfloat)g_backbuffer_preserve.height, -1.0f, 1.0f);
+    gl_matrix_mode(GL_MODELVIEW_VALUE);
+    gl_push_matrix();
+    gl_load_identity();
+
+    gl_disable_client_state(GL_COLOR_ARRAY_VALUE);
+    gl_disable_client_state(GL_NORMAL_ARRAY_VALUE);
+    gl_enable_client_state(GL_VERTEX_ARRAY_VALUE);
+    gl_enable_client_state(GL_TEXTURE_COORD_ARRAY_VALUE);
+    gl_vertex_pointer(2, GL_FLOAT_VALUE, 0, vertices);
+    gl_tex_coord_pointer(2, GL_FLOAT_VALUE, 0, texcoords);
+    gl_draw_arrays(GL_TRIANGLE_STRIP_VALUE, 0, 4);
+
+    restore_gl_cap(GL_VERTEX_ARRAY_VALUE, vertex_array, gl_enable_client_state,
+                   gl_disable_client_state);
+    restore_gl_cap(GL_TEXTURE_COORD_ARRAY_VALUE, texcoord_array, gl_enable_client_state,
+                   gl_disable_client_state);
+    restore_gl_cap(GL_COLOR_ARRAY_VALUE, color_array, gl_enable_client_state,
+                   gl_disable_client_state);
+    restore_gl_cap(GL_NORMAL_ARRAY_VALUE, normal_array, gl_enable_client_state,
+                   gl_disable_client_state);
+
+    gl_matrix_mode(GL_MODELVIEW_VALUE);
+    gl_pop_matrix();
+    gl_matrix_mode(GL_PROJECTION_VALUE);
+    gl_pop_matrix();
+    gl_matrix_mode((GLenum)matrix_mode);
+
+    gl_viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    gl_color4f(color[0], color[1], color[2], color[3]);
+    gl_color_mask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
+    if (texture_env_saved) {
+        gl_tex_envi(GL_TEXTURE_ENV_VALUE, GL_TEXTURE_ENV_MODE_VALUE, texture_env_mode);
+    }
+    gl_bind_texture(GL_TEXTURE_2D_VALUE, (GLuint)texture_binding);
+    restore_gl_cap(GL_TEXTURE_2D_VALUE, texture_2d, gl_enable, gl_disable);
+    restore_gl_cap(GL_BLEND_VALUE, blend, gl_enable, gl_disable);
+    restore_gl_cap(GL_ALPHA_TEST_VALUE, alpha_test, gl_enable, gl_disable);
+    restore_gl_cap(GL_DEPTH_TEST_VALUE, depth_test, gl_enable, gl_disable);
+    restore_gl_cap(GL_CULL_FACE_VALUE, cull_face, gl_enable, gl_disable);
+    restore_gl_cap(GL_FOG_VALUE, fog, gl_enable, gl_disable);
+    restore_gl_cap(GL_LIGHTING_VALUE, lighting, gl_enable, gl_disable);
+    restore_gl_cap(GL_STENCIL_TEST_VALUE, stencil_test, gl_enable, gl_disable);
+    restore_gl_cap(GL_SCISSOR_TEST_VALUE, scissor_test, gl_enable, gl_disable);
+    if (gl_active_texture) {
+        gl_active_texture((GLenum)active_texture);
+    }
+    if (gl_client_active_texture) {
+        gl_client_active_texture((GLenum)client_active_texture);
+    }
+    if (gl_bind_buffer) {
+        gl_bind_buffer(GL_ARRAY_BUFFER_VALUE, (GLuint)array_buffer);
     }
 }
 
@@ -321,10 +580,11 @@ static EGLBoolean host_eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
     EGLBoolean (*real)(EGLDisplay, EGLSurface) = lookup_egl("eglSwapBuffers");
     input_pump();
     dispatch_due_timers();
+    preserve_capture_frame();
     frontend_cursor_gl_present();
     EGLBoolean result = real ? real(display, surface) : 0;
     if (result) {
-        sync_framebuffer_pages();
+        preserve_restore_frame();
     }
     return result;
 }
