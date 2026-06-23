@@ -50,6 +50,9 @@ enum {
     GL_COLOR_CLEAR_VALUE = 0x0c22,
     GL_COLOR_BUFFER_BIT_VALUE = 0x00004000,
     EGL_NONE_VALUE = 0x3038,
+    EGL_SURFACE_TYPE_VALUE = 0x3033,
+    EGL_WINDOW_BIT_VALUE = 0x0004,
+    EGL_SWAP_BEHAVIOR_PRESERVED_BIT_VALUE = 0x0400,
     EGL_RENDER_BUFFER_VALUE = 0x3086,
     EGL_SINGLE_BUFFER_VALUE = 0x3085,
     EGL_SWAP_BEHAVIOR_VALUE = 0x3093,
@@ -163,6 +166,24 @@ struct s3e_pointer_touch_event {
 
 struct s3e_pointer_touch_motion_event {
     int32_t touch_id;
+    int32_t x;
+    int32_t y;
+};
+
+struct s3e_keyboard_event {
+    int32_t key;
+    int32_t pressed;
+};
+
+struct s3e_touchpad_button_event {
+    int32_t id;
+    int32_t action;
+    int32_t x;
+    int32_t y;
+};
+
+struct s3e_touchpad_motion_event {
+    int32_t id;
     int32_t x;
     int32_t y;
 };
