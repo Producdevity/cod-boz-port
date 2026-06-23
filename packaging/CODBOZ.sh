@@ -17,7 +17,7 @@ source "$controlfolder/control.txt"
 # shellcheck source=/dev/null
 source "$controlfolder/device_info.txt"
 # shellcheck source=/dev/null
-source "$controlfolder/tasksetter"
+[ -f "$controlfolder/tasksetter" ] && source "$controlfolder/tasksetter"
 # shellcheck source=/dev/null
 [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
 get_controls
@@ -26,11 +26,14 @@ get_controls
 
 gamedir="/$directory/ports/codboz"
 assetdir="$gamedir/assets"
+apkdir="$gamedir/apk"
 loader="$gamedir/codboz_s3e_loader"
+setup_script="$gamedir/codboz_setup.sh"
 s3e="$assetdir/boz.s3e.unpacked"
+installed="$gamedir/.installed"
 savehome="$gamedir/savedata-home"
 
-mkdir -p "$gamedir/logs" "$savehome"
+mkdir -p "$gamedir/logs" "$savehome" "$apkdir" "$assetdir"
 : > "$gamedir/log.txt"
 exec >> "$gamedir/log.txt" 2>&1
 
@@ -40,37 +43,120 @@ finish_port() {
   fi
 }
 
+end_splash() {
+  if command -v pm_end_splash >/dev/null 2>&1; then
+    pm_end_splash
+  fi
+}
+
+message() {
+  echo "$1"
+  if command -v pm_message >/dev/null 2>&1; then
+    pm_message "$1"
+  fi
+}
+
+show_error() {
+  echo "ERROR: $1 - $2"
+  end_splash
+  if command -v pm_show_error >/dev/null 2>&1; then
+    pm_show_error "$1" "$2"
+  else
+    message "$1: $2"
+    sleep 8
+  fi
+}
+
+has_game_data() {
+  [ -f "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
+}
+
+# shellcheck disable=SC2329
 on_signal() {
   [ -n "${game_pid:-}" ] && kill -TERM "$game_pid" 2>/dev/null || true
+  end_splash
   finish_port
   exit 130
 }
 trap on_signal INT TERM HUP
 
-if [ ! -x "$loader" ]; then
-  echo "Missing loader: $loader"
-  sleep 5
+require_file() {
+  if [ ! -f "$1" ]; then
+    show_error "$2" "$3"
+    exit 1
+  fi
+}
+
+require_executable() {
+  if [ ! -x "$1" ]; then
+    show_error "$2" "$3"
+    exit 1
+  fi
+}
+
+resolve_sdl_controller_config() {
+  if [ -n "${SDL_GAMECONTROLLERCONFIG:-}" ]; then
+    return
+  fi
+  if [ -n "${sdl_controllerconfig:-}" ]; then
+    SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
+    export SDL_GAMECONTROLLERCONFIG
+    return
+  fi
+
+  for db in "${SDL_GAMECONTROLLERCONFIG_FILE:-}" /usr/lib32/gamecontrollerdb.txt /usr/lib/gamecontrollerdb.txt "$controlfolder/gamecontrollerdb.txt"; do
+    [ -f "$db" ] || continue
+    [ -n "${SDL_CTRL_NAME:-}" ] || continue
+    SDL_GAMECONTROLLERCONFIG="$(grep -i -m 1 ",${SDL_CTRL_NAME}," "$db" || true)"
+    if [ -n "$SDL_GAMECONTROLLERCONFIG" ]; then
+      export SDL_GAMECONTROLLERCONFIG
+      return
+    fi
+  done
+}
+
+first_run_setup() {
+  require_executable "$setup_script" "Missing Setup Script" "The port install is incomplete: codboz_setup.sh is missing."
+  require_file "$controlfolder/utils/patcher.txt" "PortMaster Update Required" "This port needs PortMaster's patcher utility. Update PortMaster, then launch again."
+
+  export PATCHER_FILE="$setup_script"
+  export PATCHER_GAME="Call of Duty: Black Ops Zombies"
+  export PATCHER_TIME="10-30 minutes"
+
+  # shellcheck source=/dev/null
+  source "$controlfolder/utils/patcher.txt"
+}
+
+require_executable "$loader" "Missing Loader" "The port install is incomplete: codboz_s3e_loader is missing."
+
+if ! has_game_data; then
+  first_run_setup
+fi
+
+if ! has_game_data; then
+  show_error "Setup Failed" "Check ports/codboz/setup.log, then launch again."
   exit 1
 fi
-if [ ! -f "$s3e" ]; then
-  echo "Missing S3E image: $s3e"
-  sleep 5
-  exit 1
+
+if has_game_data && [ ! -f "$installed" ]; then
+  touch "$installed"
 fi
+
+require_file "$s3e" "Missing Game Data" "Setup did not create assets/boz.s3e.unpacked."
+end_splash
 
 export HOME="$savehome"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}"
 export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-/run}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/dbus/system_bus_socket}"
 export LD_LIBRARY_PATH="$gamedir/lib:/usr/lib32:/lib32:${LD_LIBRARY_PATH:-}"
-export SDL_GAMECONTROLLERCONFIG="${SDL_GAMECONTROLLERCONFIG:-${sdl_controllerconfig:-}}"
-unset SDL_GAMECONTROLLERCONFIG_FILE
+resolve_sdl_controller_config
 
 if command -v pm_platform_helper >/dev/null 2>&1; then
   pm_platform_helper "$loader"
 fi
 
-cd "$gamedir"
+cd "$gamedir" || exit 1
 ${TASKSET:-} "$loader" --root "$gamedir" --run "$s3e" &
 game_pid=$!
 wait "$game_pid"
