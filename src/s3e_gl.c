@@ -54,6 +54,47 @@ GL_WRAP_FLOAT3(glTranslatef, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT2(glUniform1f, GLint, GLfloat)
 GL_WRAP_FLOAT4(glUniform4f, GLint, GLfloat, GLfloat, GLfloat)
 
+static EGLBoolean host_eglChooseConfig(EGLDisplay display, const EGLint *attrib_list,
+                                       EGLConfig *configs, EGLint config_size,
+                                       EGLint *num_config) {
+    EGLBoolean (*real)(EGLDisplay, const EGLint *, EGLConfig *, EGLint, EGLint *) =
+        lookup_egl("eglChooseConfig");
+    if (!real) {
+        return 0;
+    }
+
+    EGLint attrs[64];
+    size_t out = 0;
+    int found_surface_type = 0;
+    if (attrib_list) {
+        for (const EGLint *in = attrib_list; out + 3 < sizeof(attrs) / sizeof(attrs[0]); in += 2) {
+            if (in[0] == EGL_NONE_VALUE) {
+                break;
+            }
+            attrs[out++] = in[0];
+            if (in[0] == EGL_SURFACE_TYPE_VALUE) {
+                attrs[out++] = in[1] | EGL_SWAP_BEHAVIOR_PRESERVED_BIT_VALUE;
+                found_surface_type = 1;
+            } else {
+                attrs[out++] = in[1];
+            }
+        }
+    }
+    if (!found_surface_type && out + 3 < sizeof(attrs) / sizeof(attrs[0])) {
+        attrs[out++] = EGL_SURFACE_TYPE_VALUE;
+        attrs[out++] = EGL_WINDOW_BIT_VALUE | EGL_SWAP_BEHAVIOR_PRESERVED_BIT_VALUE;
+    }
+    attrs[out++] = EGL_NONE_VALUE;
+
+    EGLint preserved_count = 0;
+    EGLint *count = num_config ? num_config : &preserved_count;
+    EGLBoolean ok = real(display, attrs, configs, config_size, count);
+    if (ok && *count > 0) {
+        return ok;
+    }
+    return real(display, attrib_list, configs, config_size, num_config);
+}
+
 static EGLSurface host_eglCreateWindowSurface(EGLDisplay display, EGLConfig config,
                                               EGLNativeWindowType window,
                                               const EGLint *attrib_list) {
@@ -62,34 +103,7 @@ static EGLSurface host_eglCreateWindowSurface(EGLDisplay display, EGLConfig conf
     if (!real) {
         return NULL;
     }
-    EGLint attrs[32];
-    const EGLint *effective_attrs = attrib_list;
-    size_t out = 0;
-    int found_render_buffer = 0;
-    if (attrib_list) {
-        for (const EGLint *in = attrib_list; out + 3 < sizeof(attrs) / sizeof(attrs[0]); in += 2) {
-            if (in[0] == EGL_NONE_VALUE) {
-                break;
-            }
-            attrs[out++] = in[0];
-            if (in[0] == EGL_RENDER_BUFFER_VALUE) {
-                attrs[out++] = EGL_SINGLE_BUFFER_VALUE;
-                found_render_buffer = 1;
-            } else {
-                attrs[out++] = in[1];
-            }
-        }
-    }
-    if (!found_render_buffer && out + 3 < sizeof(attrs) / sizeof(attrs[0])) {
-        attrs[out++] = EGL_RENDER_BUFFER_VALUE;
-        attrs[out++] = EGL_SINGLE_BUFFER_VALUE;
-    }
-    attrs[out++] = EGL_NONE_VALUE;
-    effective_attrs = attrs;
-    EGLSurface surface = real(display, config, window, effective_attrs);
-    if (!surface && attrib_list) {
-        surface = real(display, config, window, attrib_list);
-    }
+    EGLSurface surface = real(display, config, window, attrib_list);
     if (surface) {
         EGLBoolean (*surface_attrib)(EGLDisplay, EGLSurface, EGLint, EGLint) =
             lookup_egl("eglSurfaceAttrib");
@@ -383,6 +397,8 @@ void *s3e_host_resolve(const char *symbol) {
         return host_glUniform1f;
     if (strcmp(symbol, "glUniform4f") == 0)
         return host_glUniform4f;
+    if (strcmp(symbol, "eglChooseConfig") == 0)
+        return host_eglChooseConfig;
     if (strcmp(symbol, "eglCreateWindowSurface") == 0)
         return host_eglCreateWindowSurface;
     if (strcmp(symbol, "eglSwapBuffers") == 0)
