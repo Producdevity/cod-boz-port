@@ -2,20 +2,30 @@
 
 ARMHF loader for the Android Marmalade build of Call of Duty: Black Ops Zombies.
 
-This repository contains only loader/source code and packaging scripts.
+This repository contains only loader/source code, a first-launch APK extractor, and packaging scripts. It does not contain redistributable game data.
 
-# Game Data
+## Game Data
 
-You must provide the game data in the `codboz/assets` directory on the device.
-The game data is not redistributable and must stay user-provided on the device under `codboz/assets`.
+Place your legally owned Android APK on the device at:
 
-The latest official version of this `apk` is `1.0.11` and its SHA-256 is `359ee68b6e0a3a66e921ec9b955b290dedb93135fd3c20904bc1bb6f47b5499d`.
-This port only works with that exact version.
+```text
+ports/codboz/apk/game.apk
+```
+
+On first launch, PortMaster's patcher UI runs `ports/codboz/codboz_setup.sh`. The setup extracts the bundled Marmalade payload and music assets into `ports/codboz/assets`, decompresses `boz.s3e` to `boz.s3e.unpacked`, reads the resource CDN from that unpacked payload, and downloads the required `.dz` archives into `ports/codboz/assets`.
+
+The expected APK version is `1.0.11` with SHA-256:
+
+```text
+359ee68b6e0a3a66e921ec9b955b290dedb93135fd3c20904bc1bb6f47b5499d
+```
 
 ## Layout
 
 - `src/`: loader and runtime source.
 - `include/`: runtime headers.
+- `tools/apk_extract/`: first-launch APK extraction helper.
+- `third_party/lzma/`: public-domain LZMA SDK decoder used by the helper.
 - `packaging/`: PortMaster launcher files.
 - `scripts/`: build and deployment helpers.
 - `build/`: generated output.
@@ -29,12 +39,10 @@ scripts/build-docker.sh
 
 ## Deploy
 
-After building, copy the loader and launcher to a muOS/PortMaster device reachable over SSH:
+After building, copy the loader, extractor, and launcher to a muOS/PortMaster device reachable over SSH:
 
 ```bash
 scripts/deploy-muos.sh <ssh-host>
 ```
 
 The host can also be provided with `CODBOZ_DEPLOY_HOST`.
-
-I use an Anbernic RG35XX-H running muOS during development, but any device running firmware supported by PortMaster should work.
