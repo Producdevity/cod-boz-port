@@ -1,5 +1,8 @@
 #include "s3e_host_internal.h"
 
+#include <linux/fb.h>
+#include <sys/ioctl.h>
+
 #define GL_WRAP_FLOAT1(name, t1)                                                                   \
     static S3E_SOFTFP void host_##name(t1 a) {                                                     \
         void (*real)(t1) = lookup_gl(#name);                                                       \
@@ -54,9 +57,132 @@ GL_WRAP_FLOAT3(glTranslatef, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT2(glUniform1f, GLint, GLfloat)
 GL_WRAP_FLOAT4(glUniform4f, GLint, GLfloat, GLfloat, GLfloat)
 
+struct fb_page_sync {
+    int state;
+    int fd;
+    uint8_t *pixels;
+    size_t map_size;
+    uint32_t line_length;
+    uint32_t page_count;
+    uint32_t visible_height;
+    uint32_t virtual_height;
+    size_t page_bytes;
+};
+
+enum {
+    FB_PAGE_SYNC_UNTRIED = 0,
+    FB_PAGE_SYNC_READY = 1,
+    FB_PAGE_SYNC_UNSUPPORTED = 2,
+};
+
+static struct fb_page_sync g_fb_page_sync = {
+    .fd = -1,
+};
+
+static void fb_page_sync_close(int retry) {
+    if (g_fb_page_sync.pixels) {
+        munmap(g_fb_page_sync.pixels, g_fb_page_sync.map_size);
+    }
+    if (g_fb_page_sync.fd >= 0) {
+        close(g_fb_page_sync.fd);
+    }
+    memset(&g_fb_page_sync, 0, sizeof(g_fb_page_sync));
+    g_fb_page_sync.fd = -1;
+    g_fb_page_sync.state = retry ? FB_PAGE_SYNC_UNTRIED : FB_PAGE_SYNC_UNSUPPORTED;
+}
+
+static int fb_page_sync_open(void) {
+    if (g_fb_page_sync.state == FB_PAGE_SYNC_READY) {
+        return g_fb_page_sync.fd >= 0;
+    }
+    if (g_fb_page_sync.state == FB_PAGE_SYNC_UNSUPPORTED) {
+        return 0;
+    }
+    g_fb_page_sync.fd = -1;
+
+    int fd = open("/dev/fb0", O_RDWR | O_CLOEXEC);
+    if (fd < 0) {
+        g_fb_page_sync.state = FB_PAGE_SYNC_UNSUPPORTED;
+        return 0;
+    }
+
+    struct fb_var_screeninfo var;
+    struct fb_fix_screeninfo fix;
+    if (ioctl(fd, FBIOGET_VSCREENINFO, &var) != 0 || ioctl(fd, FBIOGET_FSCREENINFO, &fix) != 0 ||
+        var.yres == 0 || var.yres_virtual < var.yres * 2 || fix.line_length == 0 ||
+        fix.smem_len == 0) {
+        close(fd);
+        g_fb_page_sync.state = FB_PAGE_SYNC_UNSUPPORTED;
+        return 0;
+    }
+
+    uint64_t required_size = (uint64_t)fix.line_length * var.yres_virtual;
+    if (required_size > fix.smem_len || required_size > SIZE_MAX) {
+        close(fd);
+        g_fb_page_sync.state = FB_PAGE_SYNC_UNSUPPORTED;
+        return 0;
+    }
+
+    uint8_t *pixels = mmap(NULL, (size_t)fix.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (pixels == MAP_FAILED) {
+        close(fd);
+        g_fb_page_sync.state = FB_PAGE_SYNC_UNSUPPORTED;
+        return 0;
+    }
+
+    uint32_t page_count = var.yres_virtual / var.yres;
+
+    g_fb_page_sync.state = FB_PAGE_SYNC_READY;
+    g_fb_page_sync.fd = fd;
+    g_fb_page_sync.pixels = pixels;
+    g_fb_page_sync.map_size = (size_t)fix.smem_len;
+    g_fb_page_sync.line_length = fix.line_length;
+    g_fb_page_sync.page_count = page_count;
+    g_fb_page_sync.visible_height = var.yres;
+    g_fb_page_sync.virtual_height = var.yres_virtual;
+    g_fb_page_sync.page_bytes = (size_t)fix.line_length * var.yres;
+    return 1;
+}
+
+static void sync_framebuffer_pages(void) {
+    if (!fb_page_sync_open()) {
+        return;
+    }
+
+    struct fb_var_screeninfo var;
+    if (ioctl(g_fb_page_sync.fd, FBIOGET_VSCREENINFO, &var) != 0 ||
+        var.yres != g_fb_page_sync.visible_height ||
+        var.yres_virtual != g_fb_page_sync.virtual_height) {
+        fb_page_sync_close(1);
+        return;
+    }
+
+    uint32_t current_y = var.yoffset;
+    if (current_y % g_fb_page_sync.visible_height != 0) {
+        return;
+    }
+
+    size_t source = (size_t)current_y * g_fb_page_sync.line_length;
+    if (current_y + g_fb_page_sync.visible_height > g_fb_page_sync.virtual_height ||
+        source + g_fb_page_sync.page_bytes > g_fb_page_sync.map_size) {
+        return;
+    }
+
+    for (uint32_t page = 0; page < g_fb_page_sync.page_count; ++page) {
+        uint32_t dest_y = page * g_fb_page_sync.visible_height;
+        if (dest_y == current_y) {
+            continue;
+        }
+        size_t dest = (size_t)dest_y * g_fb_page_sync.line_length;
+        if (dest + g_fb_page_sync.page_bytes <= g_fb_page_sync.map_size) {
+            memcpy(g_fb_page_sync.pixels + dest, g_fb_page_sync.pixels + source,
+                   g_fb_page_sync.page_bytes);
+        }
+    }
+}
+
 static EGLBoolean host_eglChooseConfig(EGLDisplay display, const EGLint *attrib_list,
-                                       EGLConfig *configs, EGLint config_size,
-                                       EGLint *num_config) {
+                                       EGLConfig *configs, EGLint config_size, EGLint *num_config) {
     EGLBoolean (*real)(EGLDisplay, const EGLint *, EGLConfig *, EGLint, EGLint *) =
         lookup_egl("eglChooseConfig");
     if (!real) {
@@ -196,7 +322,11 @@ static EGLBoolean host_eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
     input_pump();
     dispatch_due_timers();
     frontend_cursor_gl_present();
-    return real ? real(display, surface) : 0;
+    EGLBoolean result = real ? real(display, surface) : 0;
+    if (result) {
+        sync_framebuffer_pages();
+    }
+    return result;
 }
 
 struct host_symbol {
