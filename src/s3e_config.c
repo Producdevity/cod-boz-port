@@ -97,7 +97,8 @@ static int config_id_matches(const char *value) {
     if (!strchr(value, '"')) {
         return 1;
     }
-    return contains_case_insensitive(value, "R800i");
+    return contains_case_insensitive(value, "R800i") ||
+           contains_case_insensitive(value, "Sony Ericsson Xperia Play");
 }
 
 static int config_condition_matches(const char *condition) {
