@@ -196,8 +196,26 @@ int32_t s3eDeviceGetInt(uint32_t key) {
 }
 
 const char *s3eDeviceGetString(uint32_t key) {
-    (void)key;
-    return "R800i";
+    switch (key) {
+    case 0:
+        return "Android";
+    case 2:
+        return "R800i";
+    case 8:
+        return "ARM7A";
+    case 0x0d:
+        return "4.1.2";
+    case 0x14:
+        return "en_US";
+    case 0x15:
+        return "Sony Ericsson Xperia Play";
+    case 0x13:
+    case 0x1f:
+    case 0x24:
+    case 0x25:
+    default:
+        return "";
+    }
 }
 
 void s3eDebugOutputString(const char *text) {
