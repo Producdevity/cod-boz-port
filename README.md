@@ -1,5 +1,7 @@
 # COD BOZ PortMaster Loader
 
+> This is a work in progress. Controls are only partially implemented.
+
 ARMHF loader for the Android Marmalade build of Call of Duty: Black Ops Zombies.
 
 This repository contains only loader/source code, a first-launch APK extractor, and packaging scripts. It does not contain redistributable game data.
