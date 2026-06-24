@@ -31,6 +31,45 @@
             real(a, b, c, d, e, f);                                                                \
     }
 
+enum {
+    FRAME_INTERVAL_US = 16667,
+    FRAME_RESET_US = FRAME_INTERVAL_US * 4,
+};
+
+static uint64_t monotonic_us(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
+}
+
+static void sleep_until_us(uint64_t target_us) {
+    for (;;) {
+        uint64_t now = monotonic_us();
+        if (now >= target_us) {
+            return;
+        }
+        uint64_t remaining = target_us - now;
+        struct timespec req = {
+            .tv_sec = (time_t)(remaining / 1000000u),
+            .tv_nsec = (long)(remaining % 1000000u) * 1000L,
+        };
+        while (nanosleep(&req, &req) != 0 && errno == EINTR) {
+        }
+    }
+}
+
+static void pace_frame(void) {
+    static uint64_t next_frame_us;
+    uint64_t now = monotonic_us();
+
+    if (!next_frame_us || now > next_frame_us + FRAME_RESET_US) {
+        next_frame_us = now + FRAME_INTERVAL_US;
+    }
+
+    sleep_until_us(next_frame_us);
+    next_frame_us += FRAME_INTERVAL_US;
+}
+
 GL_WRAP_FLOAT2(glAlphaFunc, GLenum, GLfloat)
 GL_WRAP_FLOAT4(glBlendColor, GLfloat, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT4(glClearColor, GLfloat, GLfloat, GLfloat, GLfloat)
@@ -196,7 +235,9 @@ static EGLBoolean host_eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
     input_pump();
     dispatch_due_timers();
     frontend_cursor_gl_present();
-    return real ? real(display, surface) : 0;
+    EGLBoolean result = real ? real(display, surface) : 0;
+    pace_frame();
+    return result;
 }
 
 struct host_symbol {
