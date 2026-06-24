@@ -177,7 +177,7 @@ struct s3e_keyboard_event {
 
 struct s3e_touchpad_button_event {
     int32_t id;
-    int32_t action;
+    int32_t pressed;
     int32_t x;
     int32_t y;
 };

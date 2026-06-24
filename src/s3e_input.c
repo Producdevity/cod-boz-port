@@ -48,31 +48,23 @@ enum {
 enum {
     S3E_KEY_ENTER = 4,
 
-    ANDROID_KEYCODE_DPAD_UP = 19,
-    ANDROID_KEYCODE_DPAD_DOWN = 20,
-    ANDROID_KEYCODE_DPAD_LEFT = 21,
-    ANDROID_KEYCODE_DPAD_RIGHT = 22,
-    ANDROID_KEYCODE_BUTTON_A = 96,
-    ANDROID_KEYCODE_BUTTON_B = 97,
-    ANDROID_KEYCODE_BUTTON_X = 99,
-    ANDROID_KEYCODE_BUTTON_Y = 100,
-    ANDROID_KEYCODE_BUTTON_L1 = 102,
-    ANDROID_KEYCODE_BUTTON_R1 = 103,
-    ANDROID_KEYCODE_BUTTON_START = 108,
-
-    CODBOZ_KEY_MELEE = 44,
-
     XPERIA_KEY_ALTERNATE_FIRE = 9,
     XPERIA_KEY_TACTICAL_GRENADE = 10,
     XPERIA_KEY_CHANGE_WEAPON = 11,
     XPERIA_KEY_CROUCH_PRONE = 12,
-    XPERIA_KEY_START = 72,
     XPERIA_KEY_AIM = 74,
     XPERIA_KEY_SHOOT = 75,
     XPERIA_KEY_ACTION_SPRINT = 78,
     XPERIA_KEY_MELEE = 89,
     XPERIA_KEY_THROW_GRENADE = 90,
     XPERIA_KEY_RELOAD_CHANGE_WEAPON = 126,
+    XPERIA_KEY_SELECT = 127,
+
+    S3E_KEY_GAMEPAD_A = 96,
+    S3E_KEY_GAMEPAD_B = 97,
+    S3E_KEY_GAMEPAD_Y = 100,
+    S3E_KEY_GAMEPAD_R1 = 103,
+    S3E_KEY_GAMEPAD_START = 108,
 
     XPERIA_COMPANION_ACTION = 0xd0,
     XPERIA_COMPANION_RELOAD = 0xd2,
@@ -86,8 +78,8 @@ enum {
 };
 
 enum {
-    S3E_TOUCHPAD_ACTION_DOWN = 4,
-    S3E_TOUCHPAD_ACTION_UP = 5,
+    S3E_TOUCHPAD_RELEASED = 0,
+    S3E_TOUCHPAD_PRESSED = 1,
 };
 
 enum {
@@ -130,7 +122,7 @@ struct sdl_input_api {
 struct touchpad_queued_event {
     uint8_t type;
     uint32_t id;
-    int32_t action;
+    int32_t pressed;
     int32_t x;
     int32_t y;
 };
@@ -138,57 +130,49 @@ struct touchpad_queued_event {
 static const uint32_t KEYS_DPAD_UP[] = {
     XPERIA_KEY_TACTICAL_GRENADE,
     XPERIA_COMPANION_DPAD_UP,
-    ANDROID_KEYCODE_DPAD_UP,
 };
 static const uint32_t KEYS_DPAD_DOWN[] = {
     XPERIA_KEY_CROUCH_PRONE,
     XPERIA_COMPANION_DPAD_DOWN,
-    ANDROID_KEYCODE_DPAD_DOWN,
 };
 static const uint32_t KEYS_DPAD_LEFT[] = {
     XPERIA_KEY_ALTERNATE_FIRE,
     XPERIA_COMPANION_DPAD_LEFT,
-    ANDROID_KEYCODE_DPAD_LEFT,
 };
 static const uint32_t KEYS_DPAD_RIGHT[] = {
     XPERIA_KEY_CHANGE_WEAPON,
     XPERIA_COMPANION_DPAD_RIGHT,
-    ANDROID_KEYCODE_DPAD_RIGHT,
 };
 static const uint32_t KEYS_ACTION[] = {
     XPERIA_KEY_ACTION_SPRINT,
     XPERIA_COMPANION_ACTION,
     XPERIA_COMPANION_ACTION_ALT,
-    ANDROID_KEYCODE_BUTTON_A,
+    S3E_KEY_GAMEPAD_A,
 };
 static const uint32_t KEYS_RELOAD[] = {
     XPERIA_KEY_RELOAD_CHANGE_WEAPON,
     XPERIA_COMPANION_RELOAD,
     XPERIA_COMPANION_RELOAD_ALT,
-    ANDROID_KEYCODE_BUTTON_B,
+    S3E_KEY_GAMEPAD_B,
 };
 static const uint32_t KEYS_MELEE[] = {
     XPERIA_KEY_MELEE,
-    ANDROID_KEYCODE_BUTTON_X,
-    CODBOZ_KEY_MELEE,
 };
 static const uint32_t KEYS_GRENADE[] = {
     XPERIA_KEY_THROW_GRENADE,
     XPERIA_COMPANION_GRENADE,
-    ANDROID_KEYCODE_BUTTON_Y,
+    S3E_KEY_GAMEPAD_Y,
 };
 static const uint32_t KEYS_AIM[] = {
     XPERIA_KEY_AIM,
-    ANDROID_KEYCODE_BUTTON_L1,
 };
 static const uint32_t KEYS_SHOOT[] = {
     XPERIA_KEY_SHOOT,
-    ANDROID_KEYCODE_BUTTON_R1,
+    S3E_KEY_GAMEPAD_R1,
 };
 static const uint32_t KEYS_START[] = {
-    XPERIA_KEY_START,
     S3E_KEY_ENTER,
-    ANDROID_KEYCODE_BUTTON_START,
+    S3E_KEY_GAMEPAD_START,
 };
 
 static void *g_sdl2;
@@ -465,10 +449,10 @@ static void keyboard_release_all(void) {
     }
 }
 
-static void touchpad_dispatch_button(uint32_t id, int32_t action, int32_t x, int32_t y) {
+static void touchpad_dispatch_button(uint32_t id, int32_t pressed, int32_t x, int32_t y) {
     struct s3e_touchpad_button_event event = {
         .id = (int32_t)id,
-        .action = action,
+        .pressed = pressed,
         .x = x,
         .y = y,
     };
@@ -484,7 +468,7 @@ static void touchpad_dispatch_motion(uint32_t id, int32_t x, int32_t y) {
     touchpad_dispatch(1, &event);
 }
 
-static void touchpad_queue_event(uint8_t type, uint32_t id, int32_t action, int32_t x,
+static void touchpad_queue_event(uint8_t type, uint32_t id, int32_t pressed, int32_t x,
                                  int32_t y) {
     if (type >= ARRAY_SIZE(g_touchpad_callbacks) || !g_touchpad_callbacks[type].callback) {
         return;
@@ -508,15 +492,15 @@ static void touchpad_queue_event(uint8_t type, uint32_t id, int32_t action, int3
     g_touchpad_queue[index] = (struct touchpad_queued_event){
         .type = type,
         .id = id,
-        .action = action,
+        .pressed = pressed,
         .x = x,
         .y = y,
     };
     g_touchpad_queue_count++;
 }
 
-static void touchpad_queue_button(uint32_t id, int32_t action, int32_t x, int32_t y) {
-    touchpad_queue_event(0, id, action, x, y);
+static void touchpad_queue_button(uint32_t id, int32_t pressed, int32_t x, int32_t y) {
+    touchpad_queue_event(0, id, pressed, x, y);
 }
 
 static void touchpad_queue_motion(uint32_t id, int32_t x, int32_t y) {
@@ -556,7 +540,7 @@ static void touchpad_drain_queued_events(void) {
         g_touchpad_queue_count--;
 
         if (event.type == 0) {
-            touchpad_dispatch_button(event.id, event.action, event.x, event.y);
+            touchpad_dispatch_button(event.id, event.pressed, event.x, event.y);
         } else {
             touchpad_dispatch_motion(event.id, event.x, event.y);
         }
@@ -571,7 +555,7 @@ static void touchpad_release(uint32_t id) {
     g_touchpad_active[id] = 0;
     g_touchpad_state[id] = POINTER_STATE_RELEASED;
     touchpad_drop_queued_motion(id);
-    touchpad_queue_button(id, S3E_TOUCHPAD_ACTION_UP, g_touchpad_x[id], g_touchpad_y[id]);
+    touchpad_queue_button(id, S3E_TOUCHPAD_RELEASED, g_touchpad_x[id], g_touchpad_y[id]);
 }
 
 static void touchpad_release_all(void) {
@@ -585,7 +569,7 @@ static int32_t touchpad_x_from_axis(int32_t center, int32_t radius, int32_t axis
 }
 
 static int32_t touchpad_y_from_axis(int32_t center, int32_t radius, int32_t axis) {
-    return clamp_value(center - (int32_t)((int64_t)axis * radius / 32767), window_height());
+    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767), window_height());
 }
 
 static void touchpad_update_stick(uint32_t id, int32_t x_axis, int32_t y_axis, int32_t center_x,
@@ -607,8 +591,8 @@ static void touchpad_update_stick(uint32_t id, int32_t x_axis, int32_t y_axis, i
         g_touchpad_x[id] = x;
         g_touchpad_y[id] = y;
         g_touchpad_state[id] = POINTER_STATE_PRESSED;
-        touchpad_queue_button(id, S3E_TOUCHPAD_ACTION_DOWN, x, y);
         touchpad_queue_motion(id, x, y);
+        touchpad_queue_button(id, S3E_TOUCHPAD_PRESSED, x, y);
         return;
     }
 
@@ -697,10 +681,9 @@ static void input_update_game_touchpads(void) {
 }
 
 static void keyboard_refresh(uint64_t now) {
+    (void)now;
     input_pump();
-    if (!g_cursor_active && g_controller) {
-        input_update_game_keys(now);
-    } else {
+    if (g_cursor_active || !g_controller) {
         keyboard_release_all();
     }
 }
@@ -746,6 +729,7 @@ void input_pump(void) {
     } else {
         input_release_pointer();
         input_update_game_touchpads();
+        input_update_game_keys(now);
     }
     touchpad_drain_queued_events();
 
@@ -854,9 +838,9 @@ const char *s3eKeyboardGetDisplayName(uint32_t key) {
         return "Right";
     case XPERIA_KEY_CROUCH_PRONE:
         return "Down";
-    case XPERIA_KEY_START:
+    case S3E_KEY_ENTER:
         return "Start";
-    case 73:
+    case XPERIA_KEY_SELECT:
         return "Select";
     case XPERIA_KEY_AIM:
         return "L";
