@@ -4,6 +4,8 @@ ARMHF loader for the Android Marmalade build of Call of Duty: Black Ops Zombies.
 
 This repository contains only loader/source code, a first-launch APK extractor, and packaging scripts. It does not contain redistributable game data.
 
+<img width="4032" height="3024" alt="IMG_2626" src="https://github.com/user-attachments/assets/8aa8945d-daa2-4a0d-8188-a21527c667aa" />
+
 ## Game Data
 
 Place your legally owned Android APK on the device at:
