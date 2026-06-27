@@ -1,6 +1,7 @@
 # COD BOZ PortMaster Loader
 
-> This is a work in progress. Controls are only partially implemented.
+> DO NOT CREATE ISSUES PLEASE
+> This is a work in progress. Controls, framepacing, lighting, and a lot more is only partially implemented.
 
 ARMHF loader for the Android Marmalade build of Call of Duty: Black Ops Zombies.
 
