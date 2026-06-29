@@ -3,10 +3,47 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-host="${1:-${CODBOZ_DEPLOY_HOST:-}}"
+target_root="${CODBOZ_DEPLOY_ROOT:-/mnt/mmc}"
+host=""
+
+usage() {
+  echo "Usage: $0 [--mmc|--sdcard] <ssh-host>" >&2
+  echo "Defaults to /mnt/mmc. Use --sdcard for devices that keep PortMaster on /mnt/sdcard." >&2
+  echo "Or set CODBOZ_DEPLOY_HOST and optionally CODBOZ_DEPLOY_ROOT." >&2
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --mmc)
+      target_root="/mnt/mmc"
+      ;;
+    --sdcard)
+      target_root="/mnt/sdcard"
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      if [ -n "$host" ]; then
+        echo "Unexpected argument: $1" >&2
+        usage
+        exit 2
+      fi
+      host="$1"
+      ;;
+  esac
+  shift
+done
+
+host="${host:-${CODBOZ_DEPLOY_HOST:-}}"
 if [ -z "$host" ]; then
-  echo "Usage: $0 <ssh-host>" >&2
-  echo "Or set CODBOZ_DEPLOY_HOST." >&2
+  usage
   exit 2
 fi
 
@@ -30,20 +67,17 @@ for required in "$launcher" "$setup_script"; do
   fi
 done
 
-remote_root="$(ssh "$host" '
+ssh "$host" 'sh -s' -- "$target_root" <<'REMOTE_CHECK'
 set -e
-for root in /mnt/sdcard /mnt/mmc /mnt/union; do
-  if [ -d "$root/ROMS/Ports" ]; then
-    printf "%s\n" "$root"
-    exit 0
-  fi
-done
-echo "Could not find a PortMaster ROMS/Ports directory under /mnt/sdcard, /mnt/mmc, or /mnt/union." >&2
-exit 1
-')"
+root="$1"
+if [ ! -d "$root" ]; then
+  echo "Deploy root does not exist: $root" >&2
+  exit 1
+fi
+REMOTE_CHECK
 
-gamedir="$remote_root/ports/codboz"
-portdir="$remote_root/ROMS/Ports"
+gamedir="$target_root/ports/codboz"
+portdir="$target_root/ROMS/Ports"
 
 printf 'Deploying COD BOZ to %s:%s\n' "$host" "$gamedir"
 ssh "$host" 'sh -s' -- "$gamedir" "$portdir" <<'REMOTE_MKDIR'
