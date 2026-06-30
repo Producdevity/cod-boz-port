@@ -94,27 +94,6 @@ require_executable() {
   fi
 }
 
-resolve_sdl_controller_config() {
-  if [ -n "${SDL_GAMECONTROLLERCONFIG:-}" ]; then
-    return
-  fi
-  if [ -n "${sdl_controllerconfig:-}" ]; then
-    SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
-    export SDL_GAMECONTROLLERCONFIG
-    return
-  fi
-
-  for db in "${SDL_GAMECONTROLLERCONFIG_FILE:-}" /usr/lib32/gamecontrollerdb.txt /usr/lib/gamecontrollerdb.txt "$controlfolder/gamecontrollerdb.txt"; do
-    [ -f "$db" ] || continue
-    [ -n "${SDL_CTRL_NAME:-}" ] || continue
-    SDL_GAMECONTROLLERCONFIG="$(grep -i -m 1 ",${SDL_CTRL_NAME}," "$db" || true)"
-    if [ -n "$SDL_GAMECONTROLLERCONFIG" ]; then
-      export SDL_GAMECONTROLLERCONFIG
-      return
-    fi
-  done
-}
-
 first_run_setup() {
   require_executable "$setup_script" "Missing Setup Script" "The port install is incomplete: codboz_setup.sh is missing."
   require_file "$controlfolder/utils/patcher.txt" "PortMaster Update Required" "This port needs PortMaster's patcher utility. Update PortMaster, then launch again."
@@ -150,7 +129,9 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}"
 export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-/run}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/dbus/system_bus_socket}"
 export LD_LIBRARY_PATH="$gamedir/lib:/usr/lib32:/lib32:${LD_LIBRARY_PATH:-}"
-resolve_sdl_controller_config
+if [ -n "${sdl_controllerconfig:-}" ]; then
+  export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
+fi
 
 if command -v pm_platform_helper >/dev/null 2>&1; then
   pm_platform_helper "$loader"
