@@ -875,62 +875,6 @@ void *isDeviceGetExternalResources(void) {
 }
 
 int32_t s3eExtGetHash(uint32_t hash, void *iface, uint32_t size) {
-    if (hash == S3E_THREAD_HASH) {
-        void *thread_table[20] = {
-            make_stub("s3eThread_00"),
-            make_stub("s3eThread_01"),
-            make_stub("s3eThread_02"),
-            make_stub("s3eThread_03"),
-            (void *)(uintptr_t)&s3eThreadGetCurrent,
-            make_stub("s3eThread_05"),
-            make_stub("s3eThread_06"),
-            make_stub("s3eThread_07"),
-            make_stub("s3eThread_08"),
-            (void *)(uintptr_t)&s3eMutexCreate,
-            make_stub("s3eThread_10"),
-            (void *)(uintptr_t)&s3eMutexDestroy,
-            (void *)(uintptr_t)&s3eMutexAcquire,
-            (void *)(uintptr_t)&s3eMutexRelease,
-            make_stub("s3eThread_14"),
-            make_stub("s3eThread_15"),
-            make_stub("s3eThread_16"),
-            make_stub("s3eThread_17"),
-            make_stub("s3eThread_18"),
-            make_stub("s3eThread_19"),
-        };
-        if (iface && size <= sizeof(thread_table)) {
-            memcpy(iface, thread_table, size);
-            return 0;
-        }
-        return 1;
-    }
-    if (hash == IS_IOS_UTILS_HASH) {
-        void *noop_table[13];
-        for (size_t i = 0; i < sizeof(noop_table) / sizeof(noop_table[0]); ++i) {
-            noop_table[i] = make_stub("IsIOSUtils");
-        }
-        if (iface && size <= sizeof(noop_table)) {
-            memcpy(iface, noop_table, size);
-            return 0;
-        }
-        return 1;
-    }
-    if (hash == IS_AUDIO_UNIT_HASH) {
-        void *audio_table[13] = {
-            (void *)(uintptr_t)&s3eReturn0,      (void *)(uintptr_t)&s3eReturn0,
-            (void *)(uintptr_t)&s3eReturnMinus1, (void *)(uintptr_t)&s3eReturnMinus1,
-            (void *)(uintptr_t)&s3eReturnMinus1, (void *)(uintptr_t)&s3eReturnMinus1,
-            (void *)(uintptr_t)&s3eReturnMinus1, (void *)(uintptr_t)&s3eReturn0,
-            (void *)(uintptr_t)&s3eReturn0,      (void *)(uintptr_t)&s3eReturn0,
-            (void *)(uintptr_t)&s3eReturn0,      (void *)(uintptr_t)&s3eReturn0,
-            (void *)(uintptr_t)&s3eReturn0,
-        };
-        if (iface && size <= sizeof(audio_table)) {
-            memcpy(iface, audio_table, size);
-            return 0;
-        }
-        return 1;
-    }
     if (hash == IS_DEVICE_HASH) {
         void *device_table[5] = {
             (void *)(uintptr_t)&isDeviceCallbackRegister,
@@ -939,7 +883,7 @@ int32_t s3eExtGetHash(uint32_t hash, void *iface, uint32_t size) {
             (void *)(uintptr_t)&isDeviceGetDisplayType,
             (void *)(uintptr_t)&isDeviceGetExternalResources,
         };
-        if (iface && size <= sizeof(device_table)) {
+        if (iface && size == sizeof(device_table)) {
             memcpy(iface, device_table, size);
             return 0;
         }
@@ -951,7 +895,7 @@ int32_t s3eExtGetHash(uint32_t hash, void *iface, uint32_t size) {
             (void *)(uintptr_t)&s3eReturn0,          (void *)(uintptr_t)&s3eReturn0,
             (void *)(uintptr_t)&s3eTouchpadGetInt,
         };
-        if (iface && size <= sizeof(touchpad_table)) {
+        if (iface && size == sizeof(touchpad_table)) {
             memcpy(iface, touchpad_table, size);
             return 0;
         }
