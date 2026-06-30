@@ -1,5 +1,13 @@
 #include "s3e_host_internal.h"
 
+static uint64_t timer_elapsed_ms(void) {
+    uint64_t now = monotonic_us();
+    if (!g_host_start_us || now < g_host_start_us) {
+        g_host_start_us = now;
+    }
+    return (now - g_host_start_us) / 1000u;
+}
+
 void *s3eMallocBase(uint32_t size, const char *file, int line) {
     (void)file;
     (void)line;
@@ -44,13 +52,11 @@ void s3eFreeBase(void *ptr) {
 }
 
 uint64_t s3eTimerGetUST(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
+    return timer_elapsed_ms();
 }
 
-uint32_t s3eTimerGetMs(void) {
-    return (uint32_t)monotonic_ms();
+uint64_t s3eTimerGetMs(void) {
+    return timer_elapsed_ms();
 }
 
 int32_t s3eTimerGetInt(uint32_t key) {
@@ -138,47 +144,41 @@ int32_t s3eTimerCancelTimer(uint32_t id) {
     return found ? 0 : -1;
 }
 
-uint32_t s3eTimerGetUTC(void) {
-    return (uint32_t)time(NULL);
+uint64_t s3eTimerGetUTC(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
 }
 
-int32_t s3eTimerGetLocaltimeOffset(void) {
-    time_t now = time(NULL);
+int64_t s3eTimerGetLocaltimeOffset(const uint64_t *utc_ms) {
+    time_t now = utc_ms ? (time_t)(*utc_ms / 1000u) : time(NULL);
     struct tm local_tm;
     struct tm utc_tm;
     localtime_r(&now, &local_tm);
     gmtime_r(&now, &utc_tm);
     time_t local = mktime(&local_tm);
     time_t utc = mktime(&utc_tm);
-    return (int32_t)difftime(local, utc);
+    return (int64_t)difftime(local, utc) * 1000;
 }
 
 int32_t s3eDeviceRegister(uint32_t id, void *callback, void *user_data);
 int32_t s3eDeviceUnRegister(uint32_t id, void *callback);
 
-int32_t s3eDeviceYield(uint32_t ms) {
+uint64_t s3eDeviceYield(int32_t ms) {
     input_pump();
-    if (ms >= 0x80000000u) {
+    if (ms == INT32_MIN) {
         dispatch_due_timers();
         sleep_ms(1);
-        return 0;
-    }
-    if (ms) {
-        wait_with_timers(ms);
-    } else {
-        dispatch_due_timers();
-    }
-    return 0;
-}
-
-int32_t s3eDeviceYieldUntilEvent(int32_t ms) {
-    input_pump();
-    if (ms > 0) {
+    } else if (ms > 0) {
         wait_with_timers((uint32_t)ms);
     } else {
         dispatch_due_timers();
     }
-    return 0;
+    return timer_elapsed_ms();
+}
+
+uint64_t s3eDeviceYieldUntilEvent(int32_t ms) {
+    return s3eDeviceYield(ms ? ms : INT32_MIN);
 }
 
 int32_t s3eDeviceCheckQuitRequest(void) {

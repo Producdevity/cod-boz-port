@@ -218,7 +218,9 @@ extern uint8_t g_pointer_states[5];
 extern int g_cursor_active;
 extern void (*g_debug_line_callback)(const char *text);
 extern uint8_t g_is_device_resources[IS_DEVICE_RESOURCES_SIZE];
+extern uint64_t g_host_start_us;
 
+uint64_t monotonic_us(void);
 uint64_t monotonic_ms(void);
 void sleep_ms(uint32_t ms);
 void *open_first(const char *const *names);
@@ -254,17 +256,17 @@ int32_t s3eFileRename(const char *old_name, const char *new_name);
 int32_t s3eFileAddUserFileSys(const char *prefix, const char *path);
 
 uint64_t s3eTimerGetUST(void);
-uint32_t s3eTimerGetMs(void);
+uint64_t s3eTimerGetMs(void);
 int32_t s3eTimerGetInt(uint32_t key);
 uint32_t s3eTimerSetTimer(uint32_t period_ms, void *callback, void *user_data);
 int32_t s3eTimerCancelTimer(uint32_t id);
-uint32_t s3eTimerGetUTC(void);
-int32_t s3eTimerGetLocaltimeOffset(void);
+uint64_t s3eTimerGetUTC(void);
+int64_t s3eTimerGetLocaltimeOffset(const uint64_t *utc_ms);
 
 int32_t s3eDeviceRegister(uint32_t id, void *callback, void *user_data);
 int32_t s3eDeviceUnRegister(uint32_t id, void *callback);
-int32_t s3eDeviceYield(uint32_t ms);
-int32_t s3eDeviceYieldUntilEvent(int32_t ms);
+uint64_t s3eDeviceYield(int32_t ms);
+uint64_t s3eDeviceYieldUntilEvent(int32_t ms);
 int32_t s3eDeviceCheckQuitRequest(void);
 int32_t s3eDeviceCheckPauseRequest(void);
 int32_t s3eDeviceGetInt(uint32_t key);

@@ -30,11 +30,16 @@ uint8_t g_pointer_states[5];
 int g_cursor_active = 1;
 void (*g_debug_line_callback)(const char *text);
 uint8_t g_is_device_resources[IS_DEVICE_RESOURCES_SIZE];
+uint64_t g_host_start_us;
 
-uint64_t monotonic_ms(void) {
+uint64_t monotonic_us(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+    return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
+}
+
+uint64_t monotonic_ms(void) {
+    return monotonic_us() / 1000u;
 }
 
 void sleep_ms(uint32_t ms) {
@@ -78,6 +83,7 @@ void *lookup_egl(const char *symbol) {
 }
 
 bool s3e_host_init(const char *root) {
+    g_host_start_us = monotonic_us();
     if (root && root[0]) {
         snprintf(g_root, sizeof(g_root), "%s", root);
     } else if (!getcwd(g_root, sizeof(g_root))) {
