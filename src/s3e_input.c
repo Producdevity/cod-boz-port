@@ -32,6 +32,13 @@ enum {
 };
 
 enum {
+    SDL_HAT_UP = 0x01,
+    SDL_HAT_RIGHT = 0x02,
+    SDL_HAT_DOWN = 0x04,
+    SDL_HAT_LEFT = 0x08,
+};
+
+enum {
     POINTER_STATE_UP = 0,
     POINTER_STATE_DOWN = 1,
     POINTER_STATE_PRESSED = 2,
@@ -47,6 +54,8 @@ enum {
 
 enum {
     S3E_KEY_ENTER = 4,
+    ANDROID_KEYCODE_X = 44,
+    ANDROID_KEYCODE_BUTTON_X = 99,
 
     XPERIA_KEY_ALTERNATE_FIRE = 9,
     XPERIA_KEY_TACTICAL_GRENADE = 10,
@@ -64,11 +73,6 @@ enum {
     S3E_KEY_DPAD_RIGHT_STATE = 26,
     S3E_KEY_DPAD_DOWN_STATE = 41,
     S3E_KEY_DPAD_UP_STATE = 45,
-    S3E_KEY_ACTION_CALLBACK = 96,
-    S3E_KEY_RELOAD_CALLBACK = 97,
-    S3E_KEY_GAMEPAD_Y = 100,
-    S3E_KEY_SHOOT_CALLBACK = 103,
-    S3E_KEY_START_CALLBACK = 108,
 
     XPERIA_COMPANION_ACTION = 0xd0,
     XPERIA_COMPANION_RELOAD = 0xd2,
@@ -82,26 +86,12 @@ enum {
 };
 
 enum {
-    GAME_ACTION_UP,
-    GAME_ACTION_DOWN,
-    GAME_ACTION_LEFT,
-    GAME_ACTION_RIGHT,
-    GAME_ACTION_ACTION,
-    GAME_ACTION_RELOAD,
-    GAME_ACTION_MELEE,
-    GAME_ACTION_GRENADE,
-    GAME_ACTION_AIM,
-    GAME_ACTION_SHOOT,
-    GAME_ACTION_START,
-    GAME_ACTION_COUNT,
-};
-
-enum {
     KEYBOARD_KEY_COUNT = 256,
     TOUCHPAD_COUNT = 2,
     AXIS_DEADZONE = 9000,
     XPERIA_AXIS_DEADZONE = 6000,
     TRIGGER_THRESHOLD = 16384,
+    MELEE_TRANSITION_HOLD_MS = 650,
 };
 
 enum {
@@ -110,10 +100,8 @@ enum {
 };
 
 struct key_map {
-    const uint32_t *state_keys;
-    size_t state_count;
-    const uint32_t *callback_keys;
-    size_t callback_count;
+    const uint32_t *keys;
+    size_t key_count;
 };
 
 struct sdl_input_api {
@@ -124,123 +112,95 @@ struct sdl_input_api {
     int (*IsGameController)(int joystick_index);
     void *(*GameControllerOpen)(int joystick_index);
     void (*GameControllerClose)(void *gamecontroller);
+    void *(*GameControllerGetJoystick)(void *gamecontroller);
+    int (*JoystickNumHats)(void *joystick);
+    uint8_t (*JoystickGetHat)(void *joystick, int hat);
     void (*GameControllerUpdate)(void);
     int16_t (*GameControllerGetAxis)(void *gamecontroller, int axis);
     uint8_t (*GameControllerGetButton)(void *gamecontroller, int button);
+    const char *(*GetError)(void);
 };
 
-static const uint32_t STATE_DPAD_UP[] = {
+static const uint32_t KEYS_DPAD_UP[] = {
     XPERIA_KEY_TACTICAL_GRENADE,
     XPERIA_COMPANION_DPAD_UP,
     S3E_KEY_DPAD_UP_STATE,
 };
-static const uint32_t CALLBACK_DPAD_UP[] = {
-    XPERIA_KEY_TACTICAL_GRENADE,
-};
-static const uint32_t STATE_DPAD_DOWN[] = {
+static const uint32_t KEYS_DPAD_DOWN[] = {
     XPERIA_KEY_CROUCH_PRONE,
     XPERIA_COMPANION_DPAD_DOWN,
     S3E_KEY_DPAD_DOWN_STATE,
 };
-static const uint32_t CALLBACK_DPAD_DOWN[] = {
-    XPERIA_KEY_CROUCH_PRONE,
-};
-static const uint32_t STATE_DPAD_LEFT[] = {
+static const uint32_t KEYS_DPAD_LEFT[] = {
     XPERIA_KEY_ALTERNATE_FIRE,
     XPERIA_COMPANION_DPAD_LEFT,
     S3E_KEY_DPAD_LEFT_STATE,
 };
-static const uint32_t CALLBACK_DPAD_LEFT[] = {
-    XPERIA_KEY_ALTERNATE_FIRE,
-};
-static const uint32_t STATE_DPAD_RIGHT[] = {
+static const uint32_t KEYS_DPAD_RIGHT[] = {
     XPERIA_KEY_CHANGE_WEAPON,
     XPERIA_COMPANION_DPAD_RIGHT,
+    S3E_KEY_DPAD_RIGHT_STATE,
 };
-static const uint32_t CALLBACK_DPAD_RIGHT[] = {
-    XPERIA_KEY_CHANGE_WEAPON,
-};
-static const uint32_t STATE_ACTION[] = {
+static const uint32_t KEYS_ACTION[] = {
     XPERIA_KEY_ACTION_SPRINT,
     XPERIA_COMPANION_ACTION,
     XPERIA_COMPANION_ACTION_ALT,
 };
-static const uint32_t CALLBACK_ACTION[] = {
-    XPERIA_KEY_ACTION_SPRINT,
-    S3E_KEY_ACTION_CALLBACK,
-};
-static const uint32_t STATE_RELOAD[] = {
+static const uint32_t KEYS_RELOAD[] = {
     XPERIA_KEY_RELOAD_CHANGE_WEAPON,
     XPERIA_COMPANION_RELOAD,
     XPERIA_COMPANION_RELOAD_ALT,
 };
-static const uint32_t CALLBACK_RELOAD[] = {
-    XPERIA_KEY_RELOAD_CHANGE_WEAPON,
-    S3E_KEY_RELOAD_CALLBACK,
-};
-static const uint32_t STATE_MELEE[] = {
+static const uint32_t KEYS_MELEE[] = {
     XPERIA_KEY_MELEE,
+    ANDROID_KEYCODE_BUTTON_X,
+    ANDROID_KEYCODE_X,
 };
-static const uint32_t CALLBACK_MELEE[] = {
-    XPERIA_KEY_MELEE,
-};
-static const uint32_t STATE_GRENADE[] = {
+static const uint32_t KEYS_GRENADE[] = {
     XPERIA_KEY_THROW_GRENADE,
     XPERIA_COMPANION_GRENADE,
 };
-static const uint32_t CALLBACK_GRENADE[] = {
-    XPERIA_KEY_THROW_GRENADE,
-    S3E_KEY_GAMEPAD_Y,
-};
-static const uint32_t STATE_AIM[] = {
+static const uint32_t KEYS_AIM[] = {
     XPERIA_KEY_AIM,
 };
-static const uint32_t CALLBACK_AIM[] = {
-    XPERIA_KEY_AIM,
-};
-static const uint32_t STATE_SHOOT[] = {
+static const uint32_t KEYS_SHOOT[] = {
     XPERIA_KEY_SHOOT,
 };
-static const uint32_t CALLBACK_SHOOT[] = {
-    XPERIA_KEY_SHOOT,
-    S3E_KEY_SHOOT_CALLBACK,
-};
-static const uint32_t STATE_START[] = {
+static const uint32_t KEYS_START[] = {
     S3E_KEY_ENTER,
 };
-static const uint32_t CALLBACK_START[] = {
-    S3E_KEY_ENTER,
-    S3E_KEY_START_CALLBACK,
-};
 
-#define KEY_MAP(state, callback) {state, ARRAY_SIZE(state), callback, ARRAY_SIZE(callback)}
+#define KEY_MAP(keys) {keys, ARRAY_SIZE(keys)}
 
-static const struct key_map KEYMAP_DPAD_UP = KEY_MAP(STATE_DPAD_UP, CALLBACK_DPAD_UP);
-static const struct key_map KEYMAP_DPAD_DOWN = KEY_MAP(STATE_DPAD_DOWN, CALLBACK_DPAD_DOWN);
-static const struct key_map KEYMAP_DPAD_LEFT = KEY_MAP(STATE_DPAD_LEFT, CALLBACK_DPAD_LEFT);
-static const struct key_map KEYMAP_DPAD_RIGHT = KEY_MAP(STATE_DPAD_RIGHT, CALLBACK_DPAD_RIGHT);
-static const struct key_map KEYMAP_ACTION = KEY_MAP(STATE_ACTION, CALLBACK_ACTION);
-static const struct key_map KEYMAP_RELOAD = KEY_MAP(STATE_RELOAD, CALLBACK_RELOAD);
-static const struct key_map KEYMAP_MELEE = KEY_MAP(STATE_MELEE, CALLBACK_MELEE);
-static const struct key_map KEYMAP_GRENADE = KEY_MAP(STATE_GRENADE, CALLBACK_GRENADE);
-static const struct key_map KEYMAP_AIM = KEY_MAP(STATE_AIM, CALLBACK_AIM);
-static const struct key_map KEYMAP_SHOOT = KEY_MAP(STATE_SHOOT, CALLBACK_SHOOT);
-static const struct key_map KEYMAP_START = KEY_MAP(STATE_START, CALLBACK_START);
+static const struct key_map KEYMAP_DPAD_UP = KEY_MAP(KEYS_DPAD_UP);
+static const struct key_map KEYMAP_DPAD_DOWN = KEY_MAP(KEYS_DPAD_DOWN);
+static const struct key_map KEYMAP_DPAD_LEFT = KEY_MAP(KEYS_DPAD_LEFT);
+static const struct key_map KEYMAP_DPAD_RIGHT = KEY_MAP(KEYS_DPAD_RIGHT);
+static const struct key_map KEYMAP_ACTION = KEY_MAP(KEYS_ACTION);
+static const struct key_map KEYMAP_RELOAD = KEY_MAP(KEYS_RELOAD);
+static const struct key_map KEYMAP_MELEE = KEY_MAP(KEYS_MELEE);
+static const struct key_map KEYMAP_GRENADE = KEY_MAP(KEYS_GRENADE);
+static const struct key_map KEYMAP_AIM = KEY_MAP(KEYS_AIM);
+static const struct key_map KEYMAP_SHOOT = KEY_MAP(KEYS_SHOOT);
+static const struct key_map KEYMAP_START = KEY_MAP(KEYS_START);
 
 #undef KEY_MAP
 
 static void *g_sdl2;
 static struct sdl_input_api g_sdl;
 static void *g_controller;
+static void *g_joystick;
 static int g_sdl_tried;
 static int g_input_pumping;
 static int g_prev_select;
 static int g_prev_a;
 static uint64_t g_input_last_ms;
+static uint8_t g_hat_mask;
 
 static uint8_t g_keyboard_state[KEYBOARD_KEY_COUNT];
-static uint8_t g_keyboard_pending[KEYBOARD_KEY_COUNT];
-static int g_keyboard_updating;
+static uint8_t g_keyboard_pending_release[KEYBOARD_KEY_COUNT];
+static uint64_t g_keyboard_pressed_until[KEYBOARD_KEY_COUNT];
+static uint64_t g_keyboard_released_until[KEYBOARD_KEY_COUNT];
 
 static int g_touchpad_active[TOUCHPAD_COUNT];
 static int32_t g_touchpad_x[TOUCHPAD_COUNT];
@@ -250,6 +210,10 @@ static uint8_t g_touchpad_state[TOUCHPAD_COUNT];
 static int sdl_load_symbol(void **slot, const char *name) {
     *slot = dlsym(g_sdl2, name);
     return *slot != NULL;
+}
+
+static void sdl_load_optional_symbol(void **slot, const char *name) {
+    *slot = dlsym(g_sdl2, name);
 }
 
 static void input_open(void) {
@@ -272,10 +236,22 @@ static void input_open(void) {
     ok &= sdl_load_symbol((void **)&g_sdl.IsGameController, "SDL_IsGameController");
     ok &= sdl_load_symbol((void **)&g_sdl.GameControllerOpen, "SDL_GameControllerOpen");
     ok &= sdl_load_symbol((void **)&g_sdl.GameControllerClose, "SDL_GameControllerClose");
+    sdl_load_optional_symbol((void **)&g_sdl.GameControllerGetJoystick,
+                             "SDL_GameControllerGetJoystick");
+    sdl_load_optional_symbol((void **)&g_sdl.JoystickNumHats, "SDL_JoystickNumHats");
+    sdl_load_optional_symbol((void **)&g_sdl.JoystickGetHat, "SDL_JoystickGetHat");
     ok &= sdl_load_symbol((void **)&g_sdl.GameControllerUpdate, "SDL_GameControllerUpdate");
     ok &= sdl_load_symbol((void **)&g_sdl.GameControllerGetAxis, "SDL_GameControllerGetAxis");
     ok &= sdl_load_symbol((void **)&g_sdl.GameControllerGetButton, "SDL_GameControllerGetButton");
+    sdl_load_optional_symbol((void **)&g_sdl.GetError, "SDL_GetError");
     if (!ok || g_sdl.InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) != 0) {
+        if (!ok) {
+            fprintf(stderr, "[input] SDL2 controller symbols unavailable\n");
+        } else if (g_sdl.GetError) {
+            const char *error = g_sdl.GetError();
+            fprintf(stderr, "[input] SDL_InitSubSystem failed: %s\n",
+                    error ? error : "unknown");
+        }
         return;
     }
 
@@ -285,19 +261,41 @@ static void input_open(void) {
     }
 
     int count = g_sdl.NumJoysticks();
+    int selected_index = -1;
+
     for (int i = 0; i < count; ++i) {
-        if (!g_sdl.IsGameController(i)) {
-            continue;
-        }
-        g_controller = g_sdl.GameControllerOpen(i);
-        if (g_controller) {
+        if (g_sdl.IsGameController(i)) {
+            selected_index = i;
             break;
+        }
+    }
+
+    if (selected_index >= 0) {
+        g_controller = g_sdl.GameControllerOpen(selected_index);
+        if (g_controller) {
+            g_joystick =
+                g_sdl.GameControllerGetJoystick ? g_sdl.GameControllerGetJoystick(g_controller) :
+                                                  NULL;
+            fprintf(stderr, "[input] SDL controller index=%d\n", selected_index);
         }
     }
 }
 
+static uint8_t input_current_hat_mask(void) {
+    uint8_t mask = 0;
+    if (!g_joystick || !g_sdl.JoystickNumHats || !g_sdl.JoystickGetHat) {
+        return 0;
+    }
+
+    int count = g_sdl.JoystickNumHats(g_joystick);
+    for (int i = 0; i < count; ++i) {
+        mask |= g_sdl.JoystickGetHat(g_joystick, i);
+    }
+    return mask;
+}
+
 static int input_button(int button) {
-    if (!g_controller || !g_sdl.GameControllerGetButton) {
+    if (!g_controller || !g_sdl.GameControllerGetButton || button < 0) {
         return 0;
     }
     return g_sdl.GameControllerGetButton(g_controller, button) != 0;
@@ -308,6 +306,26 @@ static int32_t input_axis_raw(int axis) {
         return 0;
     }
     return g_sdl.GameControllerGetAxis(g_controller, axis);
+}
+
+static int input_hat(uint8_t mask) {
+    return (g_hat_mask & mask) != 0;
+}
+
+static int input_dpad_up(void) {
+    return input_button(SDL_BUTTON_DPAD_UP) || input_hat(SDL_HAT_UP);
+}
+
+static int input_dpad_down(void) {
+    return input_button(SDL_BUTTON_DPAD_DOWN) || input_hat(SDL_HAT_DOWN);
+}
+
+static int input_dpad_left(void) {
+    return input_button(SDL_BUTTON_DPAD_LEFT) || input_hat(SDL_HAT_LEFT);
+}
+
+static int input_dpad_right(void) {
+    return input_button(SDL_BUTTON_DPAD_RIGHT) || input_hat(SDL_HAT_RIGHT);
 }
 
 static int32_t input_axis_deadzone(int axis, int32_t deadzone) {
@@ -357,8 +375,7 @@ static void pointer_dispatch(uint32_t id, void *event) {
     if (!slot->callback) {
         return;
     }
-    typedef int32_t (*callback_fn)(void *system_data, void *user_data);
-    ((callback_fn)(uintptr_t)slot->callback)(event, slot->user_data);
+    ((s3e_callback_fn)(uintptr_t)slot->callback)(event, slot->user_data);
 }
 
 static void touchpad_dispatch(uint32_t id, void *event) {
@@ -369,8 +386,7 @@ static void touchpad_dispatch(uint32_t id, void *event) {
     if (!slot->callback) {
         return;
     }
-    typedef int32_t (*callback_fn)(void *system_data, void *user_data);
-    ((callback_fn)(uintptr_t)slot->callback)(event, slot->user_data);
+    ((s3e_callback_fn)(uintptr_t)slot->callback)(event, slot->user_data);
 }
 
 static void pointer_set_down(int down) {
@@ -444,13 +460,19 @@ static void keyboard_dispatch_event(uint32_t key, int32_t pressed) {
         .pressed = pressed ? 1 : 0,
     };
 
-    typedef int32_t (*callback_fn)(void *system_data, void *user_data);
     for (size_t i = 0; i < ARRAY_SIZE(g_keyboard_callbacks); ++i) {
         struct keyboard_callback_slot *slot = &g_keyboard_callbacks[i];
         if (slot->callback) {
-            ((callback_fn)(uintptr_t)slot->callback)(&event, slot->user_data);
+            ((s3e_callback_fn)(uintptr_t)slot->callback)(&event, slot->user_data);
         }
     }
+}
+
+static uint32_t keyboard_transition_hold_ms(uint32_t key) {
+    if (key == XPERIA_KEY_MELEE || key == ANDROID_KEYCODE_BUTTON_X || key == ANDROID_KEYCODE_X) {
+        return MELEE_TRANSITION_HOLD_MS;
+    }
+    return 0;
 }
 
 static void keyboard_set_key(uint32_t key, int down, int dispatch_callback) {
@@ -463,16 +485,26 @@ static void keyboard_set_key(uint32_t key, int down, int dispatch_callback) {
         return;
     }
 
+    uint64_t now = monotonic_ms();
+    uint32_t hold_ms = keyboard_transition_hold_ms(key);
+    uint64_t transition_until = hold_ms ? now + hold_ms : 0;
     if (down) {
         g_keyboard_state[key] &= (uint8_t)~KEY_STATE_RELEASED;
         g_keyboard_state[key] |= KEY_STATE_DOWN | KEY_STATE_PRESSED;
+        g_keyboard_pending_release[key] = 0;
+        g_keyboard_pressed_until[key] = transition_until;
+        g_keyboard_released_until[key] = 0;
     } else {
         g_keyboard_state[key] &= (uint8_t)~KEY_STATE_DOWN;
-        g_keyboard_state[key] |= KEY_STATE_RELEASED;
-    }
-
-    if (!g_keyboard_updating) {
-        g_keyboard_pending[key] |= down ? KEY_STATE_PRESSED : KEY_STATE_RELEASED;
+        if (hold_ms && (g_keyboard_state[key] & KEY_STATE_PRESSED) &&
+            g_keyboard_pressed_until[key] > now) {
+            g_keyboard_pending_release[key] = 1;
+        } else {
+            g_keyboard_state[key] &= (uint8_t)~KEY_STATE_PRESSED;
+            g_keyboard_state[key] |= KEY_STATE_RELEASED;
+            g_keyboard_pending_release[key] = 0;
+            g_keyboard_released_until[key] = transition_until;
+        }
     }
 
     if (dispatch_callback) {
@@ -487,20 +519,29 @@ static void keyboard_set_keys(const uint32_t *keys, size_t count, int down, int 
 }
 
 static void keyboard_clear_transitions(void) {
+    uint64_t now = monotonic_ms();
     for (size_t key = 0; key < ARRAY_SIZE(g_keyboard_state); ++key) {
-        uint8_t down = g_keyboard_state[key] & KEY_STATE_DOWN;
-        uint8_t pending = g_keyboard_pending[key] & (KEY_STATE_PRESSED | KEY_STATE_RELEASED);
-        g_keyboard_state[key] = down | pending;
-        g_keyboard_pending[key] = 0;
+        uint32_t hold_ms = keyboard_transition_hold_ms((uint32_t)key);
+        if (!hold_ms) {
+            g_keyboard_state[key] &= (uint8_t)~(KEY_STATE_PRESSED | KEY_STATE_RELEASED);
+            continue;
+        }
+        if ((g_keyboard_state[key] & KEY_STATE_PRESSED) && g_keyboard_pressed_until[key] <= now) {
+            g_keyboard_state[key] &= (uint8_t)~KEY_STATE_PRESSED;
+            if (g_keyboard_pending_release[key]) {
+                g_keyboard_state[key] |= KEY_STATE_RELEASED;
+                g_keyboard_released_until[key] = now + hold_ms;
+                g_keyboard_pending_release[key] = 0;
+            }
+        }
+        if ((g_keyboard_state[key] & KEY_STATE_RELEASED) && g_keyboard_released_until[key] <= now) {
+            g_keyboard_state[key] &= (uint8_t)~KEY_STATE_RELEASED;
+        }
     }
 }
 
-static void game_action_apply(uint32_t action, int physical_down, const struct key_map *keys,
-                              uint64_t now) {
-    (void)action;
-    (void)now;
-    keyboard_set_keys(keys->callback_keys, keys->callback_count, physical_down, 1);
-    keyboard_set_keys(keys->state_keys, keys->state_count, physical_down, 0);
+static void game_action_apply(int physical_down, const struct key_map *keys) {
+    keyboard_set_keys(keys->keys, keys->key_count, physical_down, 1);
 }
 
 static void keyboard_release_all(void) {
@@ -546,11 +587,13 @@ static void touchpad_release_all(void) {
 }
 
 static int32_t touchpad_x_from_axis(int32_t center, int32_t radius, int32_t axis) {
-    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767), window_width());
+    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767),
+                       XPERIA_TOUCHPAD_WIDTH);
 }
 
 static int32_t touchpad_y_from_axis(int32_t center, int32_t radius, int32_t axis) {
-    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767), window_height());
+    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767),
+                       XPERIA_TOUCHPAD_HEIGHT);
 }
 
 static void touchpad_update_stick(uint32_t id, int32_t x_axis, int32_t y_axis, int32_t center_x,
@@ -594,14 +637,14 @@ static void input_update_cursor(uint64_t dt) {
 
     int32_t x_axis = input_axis(SDL_AXIS_LEFTX);
     int32_t y_axis = input_axis(SDL_AXIS_LEFTY);
-    if (input_button(SDL_BUTTON_DPAD_LEFT)) {
+    if (input_dpad_left()) {
         x_axis = -32767;
-    } else if (input_button(SDL_BUTTON_DPAD_RIGHT)) {
+    } else if (input_dpad_right()) {
         x_axis = 32767;
     }
-    if (input_button(SDL_BUTTON_DPAD_UP)) {
+    if (input_dpad_up()) {
         y_axis = -32767;
-    } else if (input_button(SDL_BUTTON_DPAD_DOWN)) {
+    } else if (input_dpad_down()) {
         y_axis = 32767;
     }
     if (!x_axis && !y_axis) {
@@ -620,32 +663,29 @@ static void input_update_cursor(uint64_t dt) {
     }
 }
 
-static void input_update_game_keys(uint64_t now) {
+static void input_update_game_keys(void) {
     g_prev_a = input_button(SDL_BUTTON_A);
 
-    game_action_apply(GAME_ACTION_UP, input_button(SDL_BUTTON_DPAD_UP), &KEYMAP_DPAD_UP, now);
-    game_action_apply(GAME_ACTION_DOWN, input_button(SDL_BUTTON_DPAD_DOWN), &KEYMAP_DPAD_DOWN, now);
-    game_action_apply(GAME_ACTION_LEFT, input_button(SDL_BUTTON_DPAD_LEFT), &KEYMAP_DPAD_LEFT, now);
-    game_action_apply(GAME_ACTION_RIGHT, input_button(SDL_BUTTON_DPAD_RIGHT), &KEYMAP_DPAD_RIGHT,
-                      now);
-    game_action_apply(GAME_ACTION_ACTION, input_button(SDL_BUTTON_A), &KEYMAP_ACTION, now);
-    game_action_apply(GAME_ACTION_RELOAD, input_button(SDL_BUTTON_B), &KEYMAP_RELOAD, now);
-    game_action_apply(GAME_ACTION_MELEE, input_button(SDL_BUTTON_X), &KEYMAP_MELEE, now);
-    game_action_apply(GAME_ACTION_GRENADE, input_button(SDL_BUTTON_Y), &KEYMAP_GRENADE, now);
-    game_action_apply(GAME_ACTION_AIM,
-                      input_button(SDL_BUTTON_LEFTSHOULDER) ||
+    game_action_apply(input_dpad_up(), &KEYMAP_DPAD_UP);
+    game_action_apply(input_dpad_down(), &KEYMAP_DPAD_DOWN);
+    game_action_apply(input_dpad_left(), &KEYMAP_DPAD_LEFT);
+    game_action_apply(input_dpad_right(), &KEYMAP_DPAD_RIGHT);
+    game_action_apply(input_button(SDL_BUTTON_A), &KEYMAP_ACTION);
+    game_action_apply(input_button(SDL_BUTTON_B), &KEYMAP_RELOAD);
+    game_action_apply(input_button(SDL_BUTTON_X), &KEYMAP_MELEE);
+    game_action_apply(input_button(SDL_BUTTON_Y), &KEYMAP_GRENADE);
+    game_action_apply(input_button(SDL_BUTTON_LEFTSHOULDER) ||
                           input_axis_raw(SDL_AXIS_TRIGGERLEFT) > TRIGGER_THRESHOLD,
-                      &KEYMAP_AIM, now);
-    game_action_apply(GAME_ACTION_SHOOT,
-                      input_button(SDL_BUTTON_RIGHTSHOULDER) ||
+                      &KEYMAP_AIM);
+    game_action_apply(input_button(SDL_BUTTON_RIGHTSHOULDER) ||
                           input_axis_raw(SDL_AXIS_TRIGGERRIGHT) > TRIGGER_THRESHOLD,
-                      &KEYMAP_SHOOT, now);
-    game_action_apply(GAME_ACTION_START, input_button(SDL_BUTTON_START), &KEYMAP_START, now);
+                      &KEYMAP_SHOOT);
+    game_action_apply(input_button(SDL_BUTTON_START), &KEYMAP_START);
 }
 
 static void input_update_game_touchpads(void) {
-    int32_t width = window_width();
-    int32_t height = window_height();
+    int32_t width = XPERIA_TOUCHPAD_WIDTH;
+    int32_t height = XPERIA_TOUCHPAD_HEIGHT;
     int32_t center_y = height / 2;
     touchpad_update_stick(0, input_xperia_axis(SDL_AXIS_LEFTX), input_xperia_axis(SDL_AXIS_LEFTY),
                           width / 5, center_y, width / 5, height / 2);
@@ -672,6 +712,7 @@ void input_pump(void) {
         goto out;
     }
     g_sdl.GameControllerUpdate();
+    g_hat_mask = input_current_hat_mask();
 
     uint64_t now = monotonic_ms();
     if (!g_input_last_ms) {
@@ -702,7 +743,7 @@ void input_pump(void) {
     } else {
         input_release_pointer();
         input_update_game_touchpads();
-        input_update_game_keys(now);
+        input_update_game_keys();
     }
 
 out:
@@ -716,6 +757,7 @@ void input_shutdown(void) {
     if (g_controller && g_sdl.GameControllerClose) {
         g_sdl.GameControllerClose(g_controller);
         g_controller = NULL;
+        g_joystick = NULL;
     }
     if (g_sdl2) {
         if (g_sdl.QuitSubSystem) {
@@ -759,20 +801,16 @@ int32_t s3eKeyboardUnRegister(uint32_t id, void *callback) {
 
 int32_t s3eKeyboardUpdate(void) {
     keyboard_clear_transitions();
-    g_keyboard_updating = 1;
     keyboard_refresh(monotonic_ms());
-    g_keyboard_updating = 0;
     dispatch_due_timers();
     return 0;
 }
 
 int32_t s3eKeyboardGetState(uint32_t key) {
-    keyboard_refresh(monotonic_ms());
     return key < KEYBOARD_KEY_COUNT ? g_keyboard_state[key] : 0;
 }
 
 int32_t s3eKeyboardAnyKey(void) {
-    keyboard_refresh(monotonic_ms());
     for (size_t i = 0; i < ARRAY_SIZE(g_keyboard_state); ++i) {
         if (g_keyboard_state[i] & (KEY_STATE_DOWN | KEY_STATE_PRESSED)) {
             return 1;
@@ -835,7 +873,9 @@ const char *s3eKeyboardGetDisplayName(uint32_t key) {
 
 void s3eKeyboardClearState(void) {
     memset(g_keyboard_state, 0, sizeof(g_keyboard_state));
-    memset(g_keyboard_pending, 0, sizeof(g_keyboard_pending));
+    memset(g_keyboard_pending_release, 0, sizeof(g_keyboard_pending_release));
+    memset(g_keyboard_pressed_until, 0, sizeof(g_keyboard_pressed_until));
+    memset(g_keyboard_released_until, 0, sizeof(g_keyboard_released_until));
 }
 
 int32_t s3ePointerRegister(uint32_t id, void *callback, void *user_data) {

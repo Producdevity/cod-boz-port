@@ -26,6 +26,8 @@
 #define S3E_SOFTFP
 #endif
 
+typedef int32_t(S3E_SOFTFP *s3e_callback_fn)(void *system_data, void *user_data);
+
 typedef unsigned int GLenum;
 typedef unsigned char GLboolean;
 typedef unsigned int GLbitfield;
@@ -61,6 +63,8 @@ enum {
 #define S3E_TOUCHPAD_HASH 0x1dbd7ce8u
 #define IS_DEVICE_HASH 0xe7c6ef51u
 #define S3E_HOST_MUTEX_MAGIC 0x4d555458u
+#define XPERIA_TOUCHPAD_WIDTH 960
+#define XPERIA_TOUCHPAD_HEIGHT 544
 
 struct s3e_config_entry {
     char section[64];

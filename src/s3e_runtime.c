@@ -84,8 +84,7 @@ void dispatch_due_timers(void) {
     while (ready) {
         struct timer_event *next = ready->next;
         if (ready->callback) {
-            typedef int32_t (*timer_fn)(void *system_data, void *user_data);
-            ((timer_fn)(uintptr_t)ready->callback)(NULL, ready->user_data);
+            ((s3e_callback_fn)(uintptr_t)ready->callback)(NULL, ready->user_data);
         }
         free(ready);
         ready = next;
@@ -816,11 +815,11 @@ int32_t s3eTouchpadGetInt(uint32_t key) {
     case 0:
         return 1;
     case 1:
-        return g_native_window.width;
+        return XPERIA_TOUCHPAD_WIDTH;
     case 2:
-        return g_native_window.height;
+        return XPERIA_TOUCHPAD_HEIGHT;
     default:
-        return 0;
+        return -1;
     }
 }
 
