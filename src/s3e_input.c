@@ -14,6 +14,8 @@ enum {
     SDL_BUTTON_Y = 3,
     SDL_BUTTON_BACK = 4,
     SDL_BUTTON_START = 6,
+    SDL_BUTTON_LEFTSTICK = 7,
+    SDL_BUTTON_RIGHTSTICK = 8,
     SDL_BUTTON_LEFTSHOULDER = 9,
     SDL_BUTTON_RIGHTSHOULDER = 10,
     SDL_BUTTON_DPAD_UP = 11,
@@ -27,8 +29,6 @@ enum {
     SDL_AXIS_LEFTY = 1,
     SDL_AXIS_RIGHTX = 2,
     SDL_AXIS_RIGHTY = 3,
-    SDL_AXIS_TRIGGERLEFT = 4,
-    SDL_AXIS_TRIGGERRIGHT = 5,
 };
 
 enum {
@@ -46,43 +46,15 @@ enum {
 };
 
 enum {
-    KEY_STATE_UP = 0,
     KEY_STATE_DOWN = 1,
     KEY_STATE_PRESSED = 2,
     KEY_STATE_RELEASED = 4,
 };
 
 enum {
-    S3E_KEY_ENTER = 4,
     ANDROID_KEYCODE_X = 44,
     ANDROID_KEYCODE_BUTTON_X = 99,
-
-    XPERIA_KEY_ALTERNATE_FIRE = 9,
-    XPERIA_KEY_TACTICAL_GRENADE = 10,
-    XPERIA_KEY_CHANGE_WEAPON = 11,
-    XPERIA_KEY_CROUCH_PRONE = 12,
-    XPERIA_KEY_AIM = 74,
-    XPERIA_KEY_SHOOT = 75,
-    XPERIA_KEY_ACTION_SPRINT = 78,
-    XPERIA_KEY_MELEE = 89,
-    XPERIA_KEY_THROW_GRENADE = 90,
-    XPERIA_KEY_RELOAD_CHANGE_WEAPON = 126,
-    XPERIA_KEY_SELECT = 127,
-
-    S3E_KEY_DPAD_LEFT_STATE = 23,
-    S3E_KEY_DPAD_RIGHT_STATE = 26,
-    S3E_KEY_DPAD_DOWN_STATE = 41,
-    S3E_KEY_DPAD_UP_STATE = 45,
-
-    XPERIA_COMPANION_ACTION = 0xd0,
-    XPERIA_COMPANION_RELOAD = 0xd2,
-    XPERIA_COMPANION_RELOAD_ALT = 0xc9,
-    XPERIA_COMPANION_GRENADE = 0xca,
-    XPERIA_COMPANION_DPAD_UP = 0xcc,
-    XPERIA_COMPANION_DPAD_DOWN = 0xcd,
-    XPERIA_COMPANION_DPAD_LEFT = 0xce,
-    XPERIA_COMPANION_DPAD_RIGHT = 0xcf,
-    XPERIA_COMPANION_ACTION_ALT = 200,
+    S3E_KEY_BUTTON1 = 89,
 };
 
 enum {
@@ -90,8 +62,6 @@ enum {
     TOUCHPAD_COUNT = 2,
     AXIS_DEADZONE = 9000,
     XPERIA_AXIS_DEADZONE = 6000,
-    TRIGGER_THRESHOLD = 16384,
-    MELEE_TRANSITION_HOLD_MS = 650,
 };
 
 enum {
@@ -121,68 +91,15 @@ struct sdl_input_api {
     const char *(*GetError)(void);
 };
 
-static const uint32_t KEYS_DPAD_UP[] = {
-    XPERIA_KEY_TACTICAL_GRENADE,
-    XPERIA_COMPANION_DPAD_UP,
-    S3E_KEY_DPAD_UP_STATE,
-};
-static const uint32_t KEYS_DPAD_DOWN[] = {
-    XPERIA_KEY_CROUCH_PRONE,
-    XPERIA_COMPANION_DPAD_DOWN,
-    S3E_KEY_DPAD_DOWN_STATE,
-};
-static const uint32_t KEYS_DPAD_LEFT[] = {
-    XPERIA_KEY_ALTERNATE_FIRE,
-    XPERIA_COMPANION_DPAD_LEFT,
-    S3E_KEY_DPAD_LEFT_STATE,
-};
-static const uint32_t KEYS_DPAD_RIGHT[] = {
-    XPERIA_KEY_CHANGE_WEAPON,
-    XPERIA_COMPANION_DPAD_RIGHT,
-    S3E_KEY_DPAD_RIGHT_STATE,
-};
-static const uint32_t KEYS_ACTION[] = {
-    XPERIA_KEY_ACTION_SPRINT,
-    XPERIA_COMPANION_ACTION,
-    XPERIA_COMPANION_ACTION_ALT,
-};
-static const uint32_t KEYS_RELOAD[] = {
-    XPERIA_KEY_RELOAD_CHANGE_WEAPON,
-    XPERIA_COMPANION_RELOAD,
-    XPERIA_COMPANION_RELOAD_ALT,
-};
 static const uint32_t KEYS_MELEE[] = {
-    XPERIA_KEY_MELEE,
+    S3E_KEY_BUTTON1,
     ANDROID_KEYCODE_BUTTON_X,
     ANDROID_KEYCODE_X,
-};
-static const uint32_t KEYS_GRENADE[] = {
-    XPERIA_KEY_THROW_GRENADE,
-    XPERIA_COMPANION_GRENADE,
-};
-static const uint32_t KEYS_AIM[] = {
-    XPERIA_KEY_AIM,
-};
-static const uint32_t KEYS_SHOOT[] = {
-    XPERIA_KEY_SHOOT,
-};
-static const uint32_t KEYS_START[] = {
-    S3E_KEY_ENTER,
 };
 
 #define KEY_MAP(keys) {keys, ARRAY_SIZE(keys)}
 
-static const struct key_map KEYMAP_DPAD_UP = KEY_MAP(KEYS_DPAD_UP);
-static const struct key_map KEYMAP_DPAD_DOWN = KEY_MAP(KEYS_DPAD_DOWN);
-static const struct key_map KEYMAP_DPAD_LEFT = KEY_MAP(KEYS_DPAD_LEFT);
-static const struct key_map KEYMAP_DPAD_RIGHT = KEY_MAP(KEYS_DPAD_RIGHT);
-static const struct key_map KEYMAP_ACTION = KEY_MAP(KEYS_ACTION);
-static const struct key_map KEYMAP_RELOAD = KEY_MAP(KEYS_RELOAD);
 static const struct key_map KEYMAP_MELEE = KEY_MAP(KEYS_MELEE);
-static const struct key_map KEYMAP_GRENADE = KEY_MAP(KEYS_GRENADE);
-static const struct key_map KEYMAP_AIM = KEY_MAP(KEYS_AIM);
-static const struct key_map KEYMAP_SHOOT = KEY_MAP(KEYS_SHOOT);
-static const struct key_map KEYMAP_START = KEY_MAP(KEYS_START);
 
 #undef KEY_MAP
 
@@ -196,11 +113,11 @@ static int g_prev_select;
 static int g_prev_a;
 static uint64_t g_input_last_ms;
 static uint8_t g_hat_mask;
+static uint8_t g_logged_button_state[15];
+static uint8_t g_logged_hat_mask;
+static int g_log_initialized;
 
 static uint8_t g_keyboard_state[KEYBOARD_KEY_COUNT];
-static uint8_t g_keyboard_pending_release[KEYBOARD_KEY_COUNT];
-static uint64_t g_keyboard_pressed_until[KEYBOARD_KEY_COUNT];
-static uint64_t g_keyboard_released_until[KEYBOARD_KEY_COUNT];
 
 static int g_touchpad_active[TOUCHPAD_COUNT];
 static int32_t g_touchpad_x[TOUCHPAD_COUNT];
@@ -326,6 +243,48 @@ static int input_dpad_left(void) {
 
 static int input_dpad_right(void) {
     return input_button(SDL_BUTTON_DPAD_RIGHT) || input_hat(SDL_HAT_RIGHT);
+}
+
+static void input_log_button_changes(void) {
+    static const struct {
+        int button;
+        const char *name;
+    } buttons[] = {
+        {SDL_BUTTON_A, "A"},
+        {SDL_BUTTON_B, "B"},
+        {SDL_BUTTON_X, "X"},
+        {SDL_BUTTON_Y, "Y"},
+        {SDL_BUTTON_BACK, "Back/Select"},
+        {SDL_BUTTON_START, "Start"},
+        {SDL_BUTTON_LEFTSTICK, "LeftStick"},
+        {SDL_BUTTON_RIGHTSTICK, "RightStick"},
+        {SDL_BUTTON_LEFTSHOULDER, "LeftShoulder"},
+        {SDL_BUTTON_RIGHTSHOULDER, "RightShoulder"},
+        {SDL_BUTTON_DPAD_UP, "DpadUp"},
+        {SDL_BUTTON_DPAD_DOWN, "DpadDown"},
+        {SDL_BUTTON_DPAD_LEFT, "DpadLeft"},
+        {SDL_BUTTON_DPAD_RIGHT, "DpadRight"},
+    };
+
+    for (size_t i = 0; i < ARRAY_SIZE(buttons); ++i) {
+        int button = buttons[i].button;
+        uint8_t down = (uint8_t)input_button(button);
+        if (g_log_initialized && g_logged_button_state[button] != down) {
+            fprintf(stderr, "[input] button %-13s sdl=%d %s\n", buttons[i].name, button,
+                    down ? "down" : "up");
+        }
+        g_logged_button_state[button] = down;
+    }
+
+    if (g_log_initialized && g_logged_hat_mask != g_hat_mask) {
+        fprintf(stderr, "[input] hat mask=0x%02x%s%s%s%s\n", g_hat_mask,
+                (g_hat_mask & SDL_HAT_UP) ? " up" : "",
+                (g_hat_mask & SDL_HAT_RIGHT) ? " right" : "",
+                (g_hat_mask & SDL_HAT_DOWN) ? " down" : "",
+                (g_hat_mask & SDL_HAT_LEFT) ? " left" : "");
+    }
+    g_logged_hat_mask = g_hat_mask;
+    g_log_initialized = 1;
 }
 
 static int32_t input_axis_deadzone(int axis, int32_t deadzone) {
@@ -468,13 +427,6 @@ static void keyboard_dispatch_event(uint32_t key, int32_t pressed) {
     }
 }
 
-static uint32_t keyboard_transition_hold_ms(uint32_t key) {
-    if (key == XPERIA_KEY_MELEE || key == ANDROID_KEYCODE_BUTTON_X || key == ANDROID_KEYCODE_X) {
-        return MELEE_TRANSITION_HOLD_MS;
-    }
-    return 0;
-}
-
 static void keyboard_set_key(uint32_t key, int down, int dispatch_callback) {
     if (key >= KEYBOARD_KEY_COUNT) {
         return;
@@ -485,26 +437,13 @@ static void keyboard_set_key(uint32_t key, int down, int dispatch_callback) {
         return;
     }
 
-    uint64_t now = monotonic_ms();
-    uint32_t hold_ms = keyboard_transition_hold_ms(key);
-    uint64_t transition_until = hold_ms ? now + hold_ms : 0;
     if (down) {
         g_keyboard_state[key] &= (uint8_t)~KEY_STATE_RELEASED;
         g_keyboard_state[key] |= KEY_STATE_DOWN | KEY_STATE_PRESSED;
-        g_keyboard_pending_release[key] = 0;
-        g_keyboard_pressed_until[key] = transition_until;
-        g_keyboard_released_until[key] = 0;
     } else {
         g_keyboard_state[key] &= (uint8_t)~KEY_STATE_DOWN;
-        if (hold_ms && (g_keyboard_state[key] & KEY_STATE_PRESSED) &&
-            g_keyboard_pressed_until[key] > now) {
-            g_keyboard_pending_release[key] = 1;
-        } else {
-            g_keyboard_state[key] &= (uint8_t)~KEY_STATE_PRESSED;
-            g_keyboard_state[key] |= KEY_STATE_RELEASED;
-            g_keyboard_pending_release[key] = 0;
-            g_keyboard_released_until[key] = transition_until;
-        }
+        g_keyboard_state[key] &= (uint8_t)~KEY_STATE_PRESSED;
+        g_keyboard_state[key] |= KEY_STATE_RELEASED;
     }
 
     if (dispatch_callback) {
@@ -519,24 +458,8 @@ static void keyboard_set_keys(const uint32_t *keys, size_t count, int down, int 
 }
 
 static void keyboard_clear_transitions(void) {
-    uint64_t now = monotonic_ms();
     for (size_t key = 0; key < ARRAY_SIZE(g_keyboard_state); ++key) {
-        uint32_t hold_ms = keyboard_transition_hold_ms((uint32_t)key);
-        if (!hold_ms) {
-            g_keyboard_state[key] &= (uint8_t)~(KEY_STATE_PRESSED | KEY_STATE_RELEASED);
-            continue;
-        }
-        if ((g_keyboard_state[key] & KEY_STATE_PRESSED) && g_keyboard_pressed_until[key] <= now) {
-            g_keyboard_state[key] &= (uint8_t)~KEY_STATE_PRESSED;
-            if (g_keyboard_pending_release[key]) {
-                g_keyboard_state[key] |= KEY_STATE_RELEASED;
-                g_keyboard_released_until[key] = now + hold_ms;
-                g_keyboard_pending_release[key] = 0;
-            }
-        }
-        if ((g_keyboard_state[key] & KEY_STATE_RELEASED) && g_keyboard_released_until[key] <= now) {
-            g_keyboard_state[key] &= (uint8_t)~KEY_STATE_RELEASED;
-        }
+        g_keyboard_state[key] &= (uint8_t)~(KEY_STATE_PRESSED | KEY_STATE_RELEASED);
     }
 }
 
@@ -666,21 +589,7 @@ static void input_update_cursor(uint64_t dt) {
 static void input_update_game_keys(void) {
     g_prev_a = input_button(SDL_BUTTON_A);
 
-    game_action_apply(input_dpad_up(), &KEYMAP_DPAD_UP);
-    game_action_apply(input_dpad_down(), &KEYMAP_DPAD_DOWN);
-    game_action_apply(input_dpad_left(), &KEYMAP_DPAD_LEFT);
-    game_action_apply(input_dpad_right(), &KEYMAP_DPAD_RIGHT);
-    game_action_apply(input_button(SDL_BUTTON_A), &KEYMAP_ACTION);
-    game_action_apply(input_button(SDL_BUTTON_B), &KEYMAP_RELOAD);
     game_action_apply(input_button(SDL_BUTTON_X), &KEYMAP_MELEE);
-    game_action_apply(input_button(SDL_BUTTON_Y), &KEYMAP_GRENADE);
-    game_action_apply(input_button(SDL_BUTTON_LEFTSHOULDER) ||
-                          input_axis_raw(SDL_AXIS_TRIGGERLEFT) > TRIGGER_THRESHOLD,
-                      &KEYMAP_AIM);
-    game_action_apply(input_button(SDL_BUTTON_RIGHTSHOULDER) ||
-                          input_axis_raw(SDL_AXIS_TRIGGERRIGHT) > TRIGGER_THRESHOLD,
-                      &KEYMAP_SHOOT);
-    game_action_apply(input_button(SDL_BUTTON_START), &KEYMAP_START);
 }
 
 static void input_update_game_touchpads(void) {
@@ -713,6 +622,7 @@ void input_pump(void) {
     }
     g_sdl.GameControllerUpdate();
     g_hat_mask = input_current_hat_mask();
+    input_log_button_changes();
 
     uint64_t now = monotonic_ms();
     if (!g_input_last_ms) {
@@ -842,30 +752,10 @@ int32_t s3eKeyboardSetInt(uint32_t key, int32_t value) {
 
 const char *s3eKeyboardGetDisplayName(uint32_t key) {
     switch (key) {
-    case XPERIA_KEY_ALTERNATE_FIRE:
-        return "Left";
-    case XPERIA_KEY_TACTICAL_GRENADE:
-        return "Up";
-    case XPERIA_KEY_CHANGE_WEAPON:
-        return "Right";
-    case XPERIA_KEY_CROUCH_PRONE:
-        return "Down";
-    case S3E_KEY_ENTER:
-        return "Start";
-    case XPERIA_KEY_SELECT:
-        return "Select";
-    case XPERIA_KEY_AIM:
-        return "L";
-    case XPERIA_KEY_SHOOT:
-        return "R";
-    case XPERIA_KEY_ACTION_SPRINT:
-        return "Cross";
-    case XPERIA_KEY_MELEE:
-        return "Square";
-    case XPERIA_KEY_THROW_GRENADE:
-        return "Triangle";
-    case XPERIA_KEY_RELOAD_CHANGE_WEAPON:
-        return "Circle";
+    case S3E_KEY_BUTTON1:
+    case ANDROID_KEYCODE_BUTTON_X:
+    case ANDROID_KEYCODE_X:
+        return "Melee";
     default:
         return "";
     }
@@ -873,9 +763,6 @@ const char *s3eKeyboardGetDisplayName(uint32_t key) {
 
 void s3eKeyboardClearState(void) {
     memset(g_keyboard_state, 0, sizeof(g_keyboard_state));
-    memset(g_keyboard_pending_release, 0, sizeof(g_keyboard_pending_release));
-    memset(g_keyboard_pressed_until, 0, sizeof(g_keyboard_pressed_until));
-    memset(g_keyboard_released_until, 0, sizeof(g_keyboard_released_until));
 }
 
 int32_t s3ePointerRegister(uint32_t id, void *callback, void *user_data) {
