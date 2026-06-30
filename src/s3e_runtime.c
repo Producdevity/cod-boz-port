@@ -219,17 +219,13 @@ const char *s3eDeviceGetString(uint32_t key) {
 }
 
 void s3eDebugOutputString(const char *text) {
-    if (g_debug_line_callback) {
-        g_debug_line_callback(text);
-    }
+    (void)text;
 }
 
 void s3eDebugPrint(int32_t channel, const char *text, int32_t color) {
     (void)channel;
+    (void)text;
     (void)color;
-    if (g_debug_line_callback) {
-        g_debug_line_callback(text);
-    }
 }
 
 int32_t s3eDebugGetInt(uint32_t key) {
@@ -242,9 +238,7 @@ int32_t s3eDebugIsDebuggerPresent(void) {
 }
 
 void s3eDebugTraceLine(const char *text) {
-    if (g_debug_line_callback) {
-        g_debug_line_callback(text);
-    }
+    (void)text;
 }
 
 int32_t s3eDebugAssertShow(const char *file, int32_t line, const char *expr, const char *msg) {

@@ -15,7 +15,6 @@
 static uintptr_t g_loaded_base;
 static const char g_empty_string[8] __attribute__((aligned(8))) = "";
 static uint32_t g_bucket_allocator_table[33] __attribute__((aligned(8)));
-static int g_bucket_allocator_prepared;
 static unsigned g_null_buffer_write_log_count;
 static unsigned g_null_buffer_slot_log_count;
 
@@ -38,20 +37,6 @@ static void prepare_bucket_allocator_table(uint32_t object, const char *reason) 
     memset(g_bucket_allocator_table, 0, sizeof(g_bucket_allocator_table));
     fprintf(stderr, "compat: prepared bucket table object=0x%08x reason=%s\n", object,
             reason ? reason : "unknown");
-}
-
-static void compat_debug_line(const char *text) {
-    if (!g_loaded_base || g_bucket_allocator_prepared || !text) {
-        return;
-    }
-    if (!strstr(text, "numAllocs = 0")) {
-        return;
-    }
-
-    prepare_bucket_allocator_table((uint32_t)(g_loaded_base + BUCKET_ALLOCATOR_OBJECT_OFFSET),
-                                   "numAllocs");
-    g_bucket_allocator_prepared = 1;
-    s3e_host_mark_gameplay_ready();
 }
 
 static bool recover_bucket_allocator_fault(ucontext_t *uc) {
@@ -93,8 +78,6 @@ static bool recover_bucket_allocator_fault(ucontext_t *uc) {
         fprintf(stderr, "compat: dropped stale bucket node object=0x%08x index=%u\n", object,
                 index);
     }
-    g_bucket_allocator_prepared = 1;
-    s3e_host_mark_gameplay_ready();
     return true;
 }
 
@@ -292,16 +275,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "mapped S3E at %p, entry=%p\n", (void *)loaded.base,
             (void *)(loaded.base + loaded.entry_offset));
     g_loaded_base = (uintptr_t)loaded.base;
-    g_bucket_allocator_prepared = 0;
-    s3e_host_set_debug_line_callback(compat_debug_line);
-
     if (run) {
         int (*entry)(void) = (int (*)(void))(uintptr_t)(loaded.base + loaded.entry_offset);
         int rc = entry();
         fprintf(stderr, "S3E entry returned %d\n", rc);
     }
 
-    s3e_host_set_debug_line_callback(NULL);
     s3e_loaded_image_unmap(&loaded);
     s3e_host_shutdown();
     s3e_image_free(&image);

@@ -216,7 +216,6 @@ extern int32_t g_pointer_y;
 extern int g_pointer_down;
 extern uint8_t g_pointer_states[5];
 extern int g_cursor_active;
-extern void (*g_debug_line_callback)(const char *text);
 extern uint8_t g_is_device_resources[IS_DEVICE_RESOURCES_SIZE];
 extern uint64_t g_host_start_us;
 

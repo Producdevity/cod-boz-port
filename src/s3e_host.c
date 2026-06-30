@@ -28,7 +28,6 @@ int32_t g_pointer_y = 150;
 int g_pointer_down;
 uint8_t g_pointer_states[5];
 int g_cursor_active = 1;
-void (*g_debug_line_callback)(const char *text);
 uint8_t g_is_device_resources[IS_DEVICE_RESOURCES_SIZE];
 uint64_t g_host_start_us;
 
@@ -151,9 +150,3 @@ void s3e_host_shutdown(void) {
         g_gles2 = NULL;
     }
 }
-
-void s3e_host_set_debug_line_callback(void (*callback)(const char *text)) {
-    g_debug_line_callback = callback;
-}
-
-void s3e_host_mark_gameplay_ready(void) {}
