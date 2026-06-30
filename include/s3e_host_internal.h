@@ -253,6 +253,15 @@ int32_t s3eFileMakeDirectory(const char *name);
 int32_t s3eFileDelete(const char *name);
 int32_t s3eFileRename(const char *old_name, const char *new_name);
 int32_t s3eFileAddUserFileSys(const char *prefix, const char *path);
+void *s3eFileListDirectory(const char *path);
+int32_t s3eFileListClose(void *list);
+
+void *s3eCompressionDecompInit(uint32_t type);
+int32_t s3eCompressionDecompRead(void *context, const void *source, uint32_t source_len,
+                                 void *target, uint32_t *target_len);
+int32_t s3eCompressionDecompFinal(void *context);
+int32_t s3eCompressionDecomp(const void *source, uint32_t source_len, void *target,
+                             uint32_t *target_len);
 
 uint64_t s3eTimerGetUST(void);
 uint64_t s3eTimerGetMs(void);
@@ -270,6 +279,11 @@ int32_t s3eDeviceCheckQuitRequest(void);
 int32_t s3eDeviceCheckPauseRequest(void);
 int32_t s3eDeviceGetInt(uint32_t key);
 const char *s3eDeviceGetString(uint32_t key);
+int32_t s3eDeviceSetInt(uint32_t key, int32_t value);
+int32_t s3eDeviceBacklightOn(void);
+int32_t s3eDeviceRequestQuit(void);
+int32_t s3eDeviceAbort(void);
+int32_t s3eDeviceExit(void);
 
 void s3eDebugOutputString(const char *text);
 void s3eDebugPrint(int32_t channel, const char *text, int32_t color);
@@ -312,6 +326,9 @@ int32_t s3eAccelerometerGetY(void);
 int32_t s3eAccelerometerGetZ(void);
 int32_t s3eAccelerometerGetInt(uint32_t key);
 int32_t s3eVideoGetInt(uint32_t key);
+int32_t s3eVideoPlay(const char *filename, uint32_t repeat);
+int32_t s3eVideoStop(void);
+int32_t s3eVideoResume(void);
 
 int32_t s3eAudioIsPlaying(void);
 int32_t s3eAudioSetInt(uint32_t key, int32_t value);

@@ -1,5 +1,7 @@
 #include "s3e_host_internal.h"
 
+static int g_device_quit_requested;
+
 static uint64_t timer_elapsed_ms(void) {
     uint64_t now = monotonic_us();
     if (!g_host_start_us || now < g_host_start_us) {
@@ -184,7 +186,7 @@ uint64_t s3eDeviceYieldUntilEvent(int32_t ms) {
 int32_t s3eDeviceCheckQuitRequest(void) {
     input_pump();
     dispatch_due_timers();
-    return 0;
+    return g_device_quit_requested;
 }
 
 int32_t s3eDeviceCheckPauseRequest(void) {
@@ -216,6 +218,29 @@ const char *s3eDeviceGetString(uint32_t key) {
     default:
         return "";
     }
+}
+
+int32_t s3eDeviceSetInt(uint32_t key, int32_t value) {
+    (void)key;
+    (void)value;
+    return 0;
+}
+
+int32_t s3eDeviceBacklightOn(void) {
+    return 0;
+}
+
+int32_t s3eDeviceRequestQuit(void) {
+    g_device_quit_requested = 1;
+    return 0;
+}
+
+int32_t s3eDeviceAbort(void) {
+    _Exit(1);
+}
+
+int32_t s3eDeviceExit(void) {
+    _Exit(0);
 }
 
 void s3eDebugOutputString(const char *text) {
@@ -274,6 +299,53 @@ int32_t s3eAccelerometerGetInt(uint32_t key) {
 int32_t s3eVideoGetInt(uint32_t key) {
     (void)key;
     return 0;
+}
+
+int32_t s3eVideoPlay(const char *filename, uint32_t repeat) {
+    (void)filename;
+    (void)repeat;
+    return 0;
+}
+
+int32_t s3eVideoStop(void) {
+    return 0;
+}
+
+int32_t s3eVideoResume(void) {
+    return 0;
+}
+
+void *s3eCompressionDecompInit(uint32_t type) {
+    (void)type;
+    return NULL;
+}
+
+int32_t s3eCompressionDecompRead(void *context, const void *source, uint32_t source_len,
+                                 void *target, uint32_t *target_len) {
+    (void)context;
+    (void)source;
+    (void)source_len;
+    (void)target;
+    if (target_len) {
+        *target_len = 0;
+    }
+    return -1;
+}
+
+int32_t s3eCompressionDecompFinal(void *context) {
+    (void)context;
+    return -1;
+}
+
+int32_t s3eCompressionDecomp(const void *source, uint32_t source_len, void *target,
+                             uint32_t *target_len) {
+    (void)source;
+    (void)source_len;
+    (void)target;
+    if (target_len) {
+        *target_len = 0;
+    }
+    return -1;
 }
 
 int32_t s3eAudioIsPlaying(void) {

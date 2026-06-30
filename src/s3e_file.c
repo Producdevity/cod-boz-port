@@ -557,3 +557,13 @@ int32_t s3eFileAddUserFileSys(const char *prefix, const char *path) {
     (void)path;
     return 0;
 }
+
+void *s3eFileListDirectory(const char *path) {
+    (void)path;
+    return NULL;
+}
+
+int32_t s3eFileListClose(void *list) {
+    (void)list;
+    return 0;
+}
