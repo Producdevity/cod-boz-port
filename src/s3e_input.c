@@ -54,7 +54,7 @@ enum {
 enum {
     ANDROID_KEYCODE_X = 44,
     ANDROID_KEYCODE_BUTTON_X = 99,
-    S3E_KEY_BUTTON1 = 89,
+    S3E_KEY_SQUARE = 89,
 };
 
 enum {
@@ -92,7 +92,7 @@ struct sdl_input_api {
 };
 
 static const uint32_t KEYS_MELEE[] = {
-    S3E_KEY_BUTTON1,
+    S3E_KEY_SQUARE,
     ANDROID_KEYCODE_BUTTON_X,
     ANDROID_KEYCODE_X,
 };
@@ -752,10 +752,12 @@ int32_t s3eKeyboardSetInt(uint32_t key, int32_t value) {
 
 const char *s3eKeyboardGetDisplayName(uint32_t key) {
     switch (key) {
-    case S3E_KEY_BUTTON1:
+    case S3E_KEY_SQUARE:
+        return "Square";
     case ANDROID_KEYCODE_BUTTON_X:
+        return "Button X";
     case ANDROID_KEYCODE_X:
-        return "Melee";
+        return "X";
     default:
         return "";
     }
