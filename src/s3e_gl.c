@@ -24,9 +24,39 @@
         if (real)                                                                                  \
             real(a, b, c, d);                                                                      \
     }
+#define GL_WRAP_FLOAT5(name, t1, t2, t3, t4, t5)                                                   \
+    static S3E_SOFTFP void host_##name(t1 a, t2 b, t3 c, t4 d, t5 e) {                             \
+        void (*real)(t1, t2, t3, t4, t5) = lookup_gl(#name);                                       \
+        if (real)                                                                                  \
+            real(a, b, c, d, e);                                                                   \
+    }
 #define GL_WRAP_FLOAT6(name, t1, t2, t3, t4, t5, t6)                                               \
     static S3E_SOFTFP void host_##name(t1 a, t2 b, t3 c, t4 d, t5 e, t6 f) {                       \
         void (*real)(t1, t2, t3, t4, t5, t6) = lookup_gl(#name);                                   \
+        if (real)                                                                                  \
+            real(a, b, c, d, e, f);                                                                \
+    }
+#define GL_WRAP_FLOAT1_ALIAS(name, fallback, t1)                                                    \
+    static S3E_SOFTFP void host_##name(t1 a) {                                                     \
+        void (*real)(t1) = lookup_gl(#name);                                                       \
+        if (!real)                                                                                 \
+            real = lookup_gl(#fallback);                                                           \
+        if (real)                                                                                  \
+            real(a);                                                                               \
+    }
+#define GL_WRAP_FLOAT2_ALIAS(name, fallback, t1, t2)                                                \
+    static S3E_SOFTFP void host_##name(t1 a, t2 b) {                                               \
+        void (*real)(t1, t2) = lookup_gl(#name);                                                   \
+        if (!real)                                                                                 \
+            real = lookup_gl(#fallback);                                                           \
+        if (real)                                                                                  \
+            real(a, b);                                                                            \
+    }
+#define GL_WRAP_FLOAT6_ALIAS(name, fallback, t1, t2, t3, t4, t5, t6)                                \
+    static S3E_SOFTFP void host_##name(t1 a, t2 b, t3 c, t4 d, t5 e, t6 f) {                       \
+        void (*real)(t1, t2, t3, t4, t5, t6) = lookup_gl(#name);                                   \
+        if (!real)                                                                                 \
+            real = lookup_gl(#fallback);                                                           \
         if (real)                                                                                  \
             real(a, b, c, d, e, f);                                                                \
     }
@@ -35,12 +65,6 @@ enum {
     FRAME_INTERVAL_US = 16667,
     FRAME_RESET_US = FRAME_INTERVAL_US * 4,
 };
-
-static uint64_t monotonic_us(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
-}
 
 static void sleep_until_us(uint64_t target_us) {
     for (;;) {
@@ -74,83 +98,52 @@ GL_WRAP_FLOAT2(glAlphaFunc, GLenum, GLfloat)
 GL_WRAP_FLOAT4(glBlendColor, GLfloat, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT4(glClearColor, GLfloat, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT1(glClearDepthf, GLfloat)
+GL_WRAP_FLOAT1_ALIAS(glClearDepthfOES, glClearDepthf, GLfloat)
 GL_WRAP_FLOAT4(glColor4f, GLfloat, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT2(glDepthRangef, GLfloat, GLfloat)
+GL_WRAP_FLOAT2_ALIAS(glDepthRangefOES, glDepthRangef, GLfloat, GLfloat)
+GL_WRAP_FLOAT5(glDrawTexfOES, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT2(glFogf, GLenum, GLfloat)
 GL_WRAP_FLOAT6(glFrustumf, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat)
+GL_WRAP_FLOAT6_ALIAS(glFrustumfOES, glFrustumf, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat,
+                     GLfloat)
+GL_WRAP_FLOAT2(glLightModelf, GLenum, GLfloat)
 GL_WRAP_FLOAT3(glLightf, GLenum, GLenum, GLfloat)
 GL_WRAP_FLOAT1(glLineWidth, GLfloat)
 GL_WRAP_FLOAT3(glMaterialf, GLenum, GLenum, GLfloat)
 GL_WRAP_FLOAT4(glMultiTexCoord4f, GLenum, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT3(glNormal3f, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT6(glOrthof, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat)
+GL_WRAP_FLOAT6_ALIAS(glOrthofOES, glOrthof, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat)
+GL_WRAP_FLOAT2(glPointParameterf, GLenum, GLfloat)
 GL_WRAP_FLOAT1(glPointSize, GLfloat)
 GL_WRAP_FLOAT2(glPolygonOffset, GLfloat, GLfloat)
 GL_WRAP_FLOAT4(glRotatef, GLfloat, GLfloat, GLfloat, GLfloat)
+GL_WRAP_FLOAT2(glSampleCoverage, GLfloat, GLboolean)
 GL_WRAP_FLOAT3(glScalef, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT3(glTexEnvf, GLenum, GLenum, GLfloat)
+GL_WRAP_FLOAT3(glTexGenfOES, GLenum, GLenum, GLfloat)
+GL_WRAP_FLOAT3(glTexParameterf, GLenum, GLenum, GLfloat)
 GL_WRAP_FLOAT3(glTranslatef, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT2(glUniform1f, GLint, GLfloat)
+GL_WRAP_FLOAT3(glUniform2f, GLint, GLfloat, GLfloat)
+GL_WRAP_FLOAT4(glUniform3f, GLint, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT4(glUniform4f, GLint, GLfloat, GLfloat, GLfloat)
+GL_WRAP_FLOAT5(glVertexAttrib4f, GLuint, GLfloat, GLfloat, GLfloat, GLfloat)
 
-static EGLBoolean host_eglChooseConfig(EGLDisplay display, const EGLint *attrib_list,
-                                       EGLConfig *configs, EGLint config_size,
-                                       EGLint *num_config) {
-    EGLBoolean (*real)(EGLDisplay, const EGLint *, EGLConfig *, EGLint, EGLint *) =
-        lookup_egl("eglChooseConfig");
-    if (!real) {
-        return 0;
-    }
+static void *resolve_wrapped_host_proc(const char *symbol);
 
-    EGLint attrs[64];
-    size_t out = 0;
-    int found_surface_type = 0;
-    if (attrib_list) {
-        for (const EGLint *in = attrib_list; out + 3 < sizeof(attrs) / sizeof(attrs[0]); in += 2) {
-            if (in[0] == EGL_NONE_VALUE) {
-                break;
-            }
-            attrs[out++] = in[0];
-            if (in[0] == EGL_SURFACE_TYPE_VALUE) {
-                attrs[out++] = in[1] | EGL_SWAP_BEHAVIOR_PRESERVED_BIT_VALUE;
-                found_surface_type = 1;
-            } else {
-                attrs[out++] = in[1];
-            }
-        }
-    }
-    if (!found_surface_type && out + 3 < sizeof(attrs) / sizeof(attrs[0])) {
-        attrs[out++] = EGL_SURFACE_TYPE_VALUE;
-        attrs[out++] = EGL_WINDOW_BIT_VALUE | EGL_SWAP_BEHAVIOR_PRESERVED_BIT_VALUE;
-    }
-    attrs[out++] = EGL_NONE_VALUE;
-
-    EGLint preserved_count = 0;
-    EGLint *count = num_config ? num_config : &preserved_count;
-    EGLBoolean ok = real(display, attrs, configs, config_size, count);
-    if (ok && *count > 0) {
-        return ok;
-    }
-    return real(display, attrib_list, configs, config_size, num_config);
-}
-
-static EGLSurface host_eglCreateWindowSurface(EGLDisplay display, EGLConfig config,
-                                              EGLNativeWindowType window,
-                                              const EGLint *attrib_list) {
-    EGLSurface (*real)(EGLDisplay, EGLConfig, EGLNativeWindowType, const EGLint *) =
-        lookup_egl("eglCreateWindowSurface");
-    if (!real) {
+static void *host_eglGetProcAddress(const char *procname) {
+    if (!procname) {
         return NULL;
     }
-    EGLSurface surface = real(display, config, window, attrib_list);
-    if (surface) {
-        EGLBoolean (*surface_attrib)(EGLDisplay, EGLSurface, EGLint, EGLint) =
-            lookup_egl("eglSurfaceAttrib");
-        if (surface_attrib) {
-            surface_attrib(display, surface, EGL_SWAP_BEHAVIOR_VALUE, EGL_BUFFER_PRESERVED_VALUE);
-        }
+    void *wrapped = resolve_wrapped_host_proc(procname);
+    if (wrapped) {
+        return wrapped;
     }
-    return surface;
+
+    void *(*real)(const char *) = lookup_egl("eglGetProcAddress");
+    return real ? real(procname) : NULL;
 }
 
 static void cursor_clear_rect(GLint x, GLint y, GLsizei w, GLsizei h,
@@ -407,7 +400,7 @@ static const struct host_symbol HOST_SYMBOLS[] = {
     HOST(s3eExtGetHash),
 };
 
-void *s3e_host_resolve(const char *symbol) {
+static void *resolve_wrapped_host_proc(const char *symbol) {
     if (strcmp(symbol, "glAlphaFunc") == 0)
         return host_glAlphaFunc;
     if (strcmp(symbol, "glBlendColor") == 0)
@@ -416,16 +409,26 @@ void *s3e_host_resolve(const char *symbol) {
         return host_glClearColor;
     if (strcmp(symbol, "glClearDepthf") == 0)
         return host_glClearDepthf;
+    if (strcmp(symbol, "glClearDepthfOES") == 0)
+        return host_glClearDepthfOES;
     if (strcmp(symbol, "glColor4f") == 0)
         return host_glColor4f;
     if (strcmp(symbol, "glDepthRangef") == 0)
         return host_glDepthRangef;
+    if (strcmp(symbol, "glDepthRangefOES") == 0)
+        return host_glDepthRangefOES;
+    if (strcmp(symbol, "glDrawTexfOES") == 0)
+        return host_glDrawTexfOES;
     if (strcmp(symbol, "glFogf") == 0)
         return host_glFogf;
     if (strcmp(symbol, "glFrustumf") == 0)
         return host_glFrustumf;
+    if (strcmp(symbol, "glFrustumfOES") == 0)
+        return host_glFrustumfOES;
     if (strcmp(symbol, "glLightf") == 0)
         return host_glLightf;
+    if (strcmp(symbol, "glLightModelf") == 0)
+        return host_glLightModelf;
     if (strcmp(symbol, "glLineWidth") == 0)
         return host_glLineWidth;
     if (strcmp(symbol, "glMaterialf") == 0)
@@ -436,28 +439,50 @@ void *s3e_host_resolve(const char *symbol) {
         return host_glNormal3f;
     if (strcmp(symbol, "glOrthof") == 0)
         return host_glOrthof;
+    if (strcmp(symbol, "glOrthofOES") == 0)
+        return host_glOrthofOES;
+    if (strcmp(symbol, "glPointParameterf") == 0)
+        return host_glPointParameterf;
     if (strcmp(symbol, "glPointSize") == 0)
         return host_glPointSize;
     if (strcmp(symbol, "glPolygonOffset") == 0)
         return host_glPolygonOffset;
     if (strcmp(symbol, "glRotatef") == 0)
         return host_glRotatef;
+    if (strcmp(symbol, "glSampleCoverage") == 0)
+        return host_glSampleCoverage;
     if (strcmp(symbol, "glScalef") == 0)
         return host_glScalef;
     if (strcmp(symbol, "glTexEnvf") == 0)
         return host_glTexEnvf;
+    if (strcmp(symbol, "glTexGenfOES") == 0)
+        return host_glTexGenfOES;
+    if (strcmp(symbol, "glTexParameterf") == 0)
+        return host_glTexParameterf;
     if (strcmp(symbol, "glTranslatef") == 0)
         return host_glTranslatef;
     if (strcmp(symbol, "glUniform1f") == 0)
         return host_glUniform1f;
+    if (strcmp(symbol, "glUniform2f") == 0)
+        return host_glUniform2f;
+    if (strcmp(symbol, "glUniform3f") == 0)
+        return host_glUniform3f;
     if (strcmp(symbol, "glUniform4f") == 0)
         return host_glUniform4f;
-    if (strcmp(symbol, "eglChooseConfig") == 0)
-        return host_eglChooseConfig;
-    if (strcmp(symbol, "eglCreateWindowSurface") == 0)
-        return host_eglCreateWindowSurface;
+    if (strcmp(symbol, "glVertexAttrib4f") == 0)
+        return host_glVertexAttrib4f;
+    if (strcmp(symbol, "eglGetProcAddress") == 0)
+        return host_eglGetProcAddress;
     if (strcmp(symbol, "eglSwapBuffers") == 0)
         return host_eglSwapBuffers;
+    return NULL;
+}
+
+void *s3e_host_resolve(const char *symbol) {
+    void *wrapped = resolve_wrapped_host_proc(symbol);
+    if (wrapped) {
+        return wrapped;
+    }
     if (strncmp(symbol, "egl", 3) == 0) {
         void *addr = lookup_egl(symbol);
         return addr ? addr : make_stub(symbol);
