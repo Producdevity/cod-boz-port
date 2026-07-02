@@ -1,0 +1,8 @@
+LZMA SDK Decoder
+
+The files in third_party/lzma are the minimal ANSI-C LZMA decoder files from
+the official LZMA SDK 26.01 by Igor Pavlov.
+
+Source: https://www.7-zip.org/sdk.html
+
+License: public domain.
