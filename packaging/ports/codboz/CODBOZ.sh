@@ -14,6 +14,7 @@ fi
 
 # shellcheck source=/dev/null
 source "$controlfolder/control.txt"
+export PORT_32BIT="Y"
 # shellcheck source=/dev/null
 source "$controlfolder/device_info.txt"
 # shellcheck source=/dev/null
@@ -33,9 +34,9 @@ s3e="$assetdir/boz.s3e.unpacked"
 installed="$gamedir/.installed"
 savehome="$gamedir/savedata-home"
 
-mkdir -p "$gamedir/logs" "$savehome" "$apkdir" "$assetdir"
-: > "$gamedir/log.txt"
-exec >> "$gamedir/log.txt" 2>&1
+mkdir -p "$savehome" "$apkdir" "$assetdir"
+cd "$gamedir" || exit 1
+> "$gamedir/log.txt" && exec > >(tee "$gamedir/log.txt") 2>&1
 
 finish_port() {
   if command -v pm_finish >/dev/null 2>&1; then
@@ -128,16 +129,21 @@ export HOME="$savehome"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}"
 export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-/run}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/dbus/system_bus_socket}"
-export LD_LIBRARY_PATH="$gamedir/lib:/usr/lib32:/lib32:${LD_LIBRARY_PATH:-}"
+[ -z "${SPA_PLUGIN_DIR:-}" ] && [ -d /usr/lib32/spa-0.2 ] && export SPA_PLUGIN_DIR=/usr/lib32/spa-0.2
+[ -z "${PIPEWIRE_MODULE_DIR:-}" ] && [ -d /usr/lib32/pipewire-0.3 ] && export PIPEWIRE_MODULE_DIR=/usr/lib32/pipewire-0.3
+[ -z "${ALSA_CONFIG:-}" ] && [ -f /usr/share/alsa/alsa.conf ] && export ALSA_CONFIG=/usr/share/alsa/alsa.conf
+export LD_LIBRARY_PATH="$gamedir/libs.armhf:${LD_LIBRARY_PATH:-}"
 if [ -n "${sdl_controllerconfig:-}" ]; then
   export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
 fi
 
+if [ -n "${GPTOKEYB:-}" ]; then
+  $GPTOKEYB "codboz_s3e_loader" &
+fi
 if command -v pm_platform_helper >/dev/null 2>&1; then
   pm_platform_helper "$loader"
 fi
 
-cd "$gamedir" || exit 1
 ${TASKSET:-} "$loader" --root "$gamedir" --run "$s3e" &
 game_pid=$!
 wait "$game_pid"

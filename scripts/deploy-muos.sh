@@ -47,22 +47,31 @@ if [ -z "$host" ]; then
   exit 2
 fi
 
-loader="build/codboz_s3e_loader"
-extractor="build/codboz_apk_extract"
-launcher="packaging/CODBOZ.sh"
-setup_script="packaging/codboz_setup.sh"
+package_dir="build/package/ports/codboz"
+port_payload="$package_dir/codboz"
+loader="$port_payload/codboz_s3e_loader"
+extractor="$port_payload/codboz_apk_extract"
+launcher="$package_dir/CODBOZ.sh"
+setup_script="$port_payload/codboz_setup.sh"
 
-for required in "$loader" "$extractor"; do
+if [ ! -d "$package_dir" ]; then
+  echo "Missing package staging directory: $package_dir" >&2
+  echo "Run scripts/build-docker.sh first." >&2
+  exit 1
+fi
+
+for required in "$loader" "$extractor" "$setup_script"; do
   if [ ! -x "$required" ]; then
-    echo "Missing binary: $required" >&2
+    echo "Missing executable: $required" >&2
     echo "Run scripts/build-docker.sh first." >&2
     exit 1
   fi
 done
 
-for required in "$launcher" "$setup_script"; do
+for required in "$launcher" "$package_dir/port.json" "$package_dir/README.md" "$package_dir/gameinfo.xml"; do
   if [ ! -f "$required" ]; then
     echo "Missing packaging file: $required" >&2
+    echo "Run scripts/build-docker.sh first." >&2
     exit 1
   fi
 done

@@ -14,6 +14,7 @@ fi
 
 # shellcheck source=/dev/null
 source "$controlfolder/control.txt"
+export PORT_32BIT="Y"
 # shellcheck source=/dev/null
 [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
 

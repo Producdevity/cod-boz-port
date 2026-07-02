@@ -12,6 +12,6 @@ docker run --rm \
   -v "$PWD":/src \
   -w /src \
   "$image" \
-  make clean all CC=arm-linux-gnueabihf-gcc CFLAGS="$flags"
+  make clean zip CC=arm-linux-gnueabihf-gcc CFLAGS="$flags"
 
 file build/codboz_s3e_loader build/codboz_apk_extract

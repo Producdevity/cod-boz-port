@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<gameList>
+  <game>
+    <path>./CODBOZ.sh</path>
+    <name>Call of Duty: Black Ops Zombies</name>
+    <desc>A survival-horror wave shooter based on the Android release of Call of Duty: Black Ops Zombies.</desc>
+    <releasedate>20111201T000000</releasedate>
+    <developer>Ideaworks3D</developer>
+    <publisher>Activision</publisher>
+    <genre>Action / FPS</genre>
+    <image>./codboz/cover.png</image>
+  </game>
+</gameList>

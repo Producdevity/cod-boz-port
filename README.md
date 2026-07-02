@@ -1,9 +1,6 @@
 # COD BOZ PortMaster Loader
 
-> DO NOT CREATE ISSUES PLEASE
-> This is a work in progress. Controls, framepacing, lighting, audio, and a lot more is only partially implemented.
-
-ARMHF loader for the Android Marmalade build of Call of Duty: Black Ops Zombies.
+Work-in-progress ARMHF loader for the Android Marmalade build of Call of Duty: Black Ops Zombies.
 
 This repository contains only loader/source code, a first-launch APK extractor, and packaging scripts. It does not contain redistributable game data.
 
@@ -42,6 +39,12 @@ The expected APK version is `1.0.11` with SHA-256:
 scripts/build-docker.sh
 ```
 
+This builds the ARMHF loader, builds the APK extraction helper, and stages a PortMaster package tree under:
+
+```text
+build/package/ports/codboz/
+```
+
 ## Deploy
 
 After building, copy the loader, extractor, and launcher to a muOS/PortMaster device reachable over SSH:
@@ -51,3 +54,5 @@ scripts/deploy-muos.sh <ssh-host>
 ```
 
 The host can also be provided with `CODBOZ_DEPLOY_HOST`.
+
+The deploy script installs from the staged package tree. Run `scripts/build-docker.sh` first.
