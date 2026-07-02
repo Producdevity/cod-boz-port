@@ -29,6 +29,8 @@ enum {
     SDL_AXIS_LEFTY = 1,
     SDL_AXIS_RIGHTX = 2,
     SDL_AXIS_RIGHTY = 3,
+    SDL_AXIS_TRIGGERLEFT = 4,
+    SDL_AXIS_TRIGGERRIGHT = 5,
 };
 
 enum {
@@ -52,9 +54,39 @@ enum {
 };
 
 enum {
-    ANDROID_KEYCODE_X = 44,
-    ANDROID_KEYCODE_BUTTON_X = 99,
-    S3E_KEY_SQUARE = 89,
+    BINDING_KEY_SHOOT = 8,
+    BINDING_KEY_CHANGE_WEAPON = 14,
+    BINDING_KEY_CROUCH_PRONE = 48,
+    BINDING_KEY_RELOAD = 40,
+    BINDING_KEY_MELEE = 44,
+    BINDING_KEY_ALTERNATE_FIRE = 18,
+    BINDING_KEY_AIM = 100,
+    BINDING_KEY_THROW_GRENADE = 29,
+    BINDING_KEY_TACTICAL_GRENADE = 42,
+    BINDING_KEY_ACTION_SPRINT = 28,
+    BINDING_KEY_TOGGLE_FREE_MODE = 39,
+    XPERIA_KEY_ALTERNATE_FIRE = 9,
+    XPERIA_KEY_TACTICAL_GRENADE = 10,
+    XPERIA_KEY_CHANGE_WEAPON = 11,
+    XPERIA_KEY_CROUCH_PRONE = 12,
+    XPERIA_KEY_AIM = 74,
+    XPERIA_KEY_SHOOT = 75,
+    XPERIA_KEY_ACTION_SPRINT = 78,
+    XPERIA_KEY_MELEE = 89,
+    XPERIA_KEY_THROW_GRENADE = 90,
+    XPERIA_KEY_RELOAD = 126,
+    XPERIA_KEY_PAUSE = 72,
+    S3E_KEY_ABS_GAME_A = 200,
+    S3E_KEY_ABS_GAME_B = 201,
+    S3E_KEY_ABS_GAME_C = 202,
+    S3E_KEY_ABS_GAME_D = 203,
+    S3E_KEY_ABS_UP = 204,
+    S3E_KEY_ABS_DOWN = 205,
+    S3E_KEY_ABS_LEFT = 206,
+    S3E_KEY_ABS_RIGHT = 207,
+    S3E_KEY_ABS_OK = 208,
+    S3E_KEY_ABS_ASK = 209,
+    S3E_KEY_ABS_BSK = 210,
 };
 
 enum {
@@ -62,6 +94,7 @@ enum {
     TOUCHPAD_COUNT = 2,
     AXIS_DEADZONE = 9000,
     XPERIA_AXIS_DEADZONE = 6000,
+    TRIGGER_THRESHOLD = 16384,
 };
 
 enum {
@@ -91,15 +124,34 @@ struct sdl_input_api {
     const char *(*GetError)(void);
 };
 
-static const uint32_t KEYS_MELEE[] = {
-    S3E_KEY_SQUARE,
-    ANDROID_KEYCODE_BUTTON_X,
-    ANDROID_KEYCODE_X,
-};
+static const uint32_t KEY_ACTION[] = {BINDING_KEY_ACTION_SPRINT, XPERIA_KEY_ACTION_SPRINT};
+static const uint32_t KEY_RELOAD[] = {BINDING_KEY_RELOAD, XPERIA_KEY_RELOAD};
+static const uint32_t KEY_MELEE[] = {BINDING_KEY_MELEE, XPERIA_KEY_MELEE};
+static const uint32_t KEY_GRENADE[] = {BINDING_KEY_THROW_GRENADE, XPERIA_KEY_THROW_GRENADE};
+static const uint32_t KEY_AIM[] = {BINDING_KEY_AIM, XPERIA_KEY_AIM};
+static const uint32_t KEY_SHOOT[] = {BINDING_KEY_SHOOT, XPERIA_KEY_SHOOT};
+static const uint32_t KEY_TACTICAL[] = {BINDING_KEY_TACTICAL_GRENADE,
+                                        XPERIA_KEY_TACTICAL_GRENADE};
+static const uint32_t KEY_CROUCH[] = {BINDING_KEY_CROUCH_PRONE, XPERIA_KEY_CROUCH_PRONE};
+static const uint32_t KEY_ALT_FIRE[] = {BINDING_KEY_ALTERNATE_FIRE,
+                                        XPERIA_KEY_ALTERNATE_FIRE};
+static const uint32_t KEY_CHANGE_WEAPON[] = {BINDING_KEY_CHANGE_WEAPON,
+                                             XPERIA_KEY_CHANGE_WEAPON};
+static const uint32_t KEY_START[] = {XPERIA_KEY_PAUSE};
 
 #define KEY_MAP(keys) {keys, ARRAY_SIZE(keys)}
 
-static const struct key_map KEYMAP_MELEE = KEY_MAP(KEYS_MELEE);
+static const struct key_map KEYMAP_ACTION = KEY_MAP(KEY_ACTION);
+static const struct key_map KEYMAP_RELOAD = KEY_MAP(KEY_RELOAD);
+static const struct key_map KEYMAP_MELEE = KEY_MAP(KEY_MELEE);
+static const struct key_map KEYMAP_GRENADE = KEY_MAP(KEY_GRENADE);
+static const struct key_map KEYMAP_AIM = KEY_MAP(KEY_AIM);
+static const struct key_map KEYMAP_SHOOT = KEY_MAP(KEY_SHOOT);
+static const struct key_map KEYMAP_TACTICAL = KEY_MAP(KEY_TACTICAL);
+static const struct key_map KEYMAP_CROUCH = KEY_MAP(KEY_CROUCH);
+static const struct key_map KEYMAP_ALT_FIRE = KEY_MAP(KEY_ALT_FIRE);
+static const struct key_map KEYMAP_CHANGE_WEAPON = KEY_MAP(KEY_CHANGE_WEAPON);
+static const struct key_map KEYMAP_START = KEY_MAP(KEY_START);
 
 #undef KEY_MAP
 
@@ -109,13 +161,11 @@ static void *g_controller;
 static void *g_joystick;
 static int g_sdl_tried;
 static int g_input_pumping;
+static int g_keyboard_update_active;
 static int g_prev_select;
 static int g_prev_a;
 static uint64_t g_input_last_ms;
 static uint8_t g_hat_mask;
-static uint8_t g_logged_button_state[15];
-static uint8_t g_logged_hat_mask;
-static int g_log_initialized;
 
 static uint8_t g_keyboard_state[KEYBOARD_KEY_COUNT];
 
@@ -193,7 +243,6 @@ static void input_open(void) {
             g_joystick =
                 g_sdl.GameControllerGetJoystick ? g_sdl.GameControllerGetJoystick(g_controller) :
                                                   NULL;
-            fprintf(stderr, "[input] SDL controller index=%d\n", selected_index);
         }
     }
 }
@@ -225,6 +274,10 @@ static int32_t input_axis_raw(int axis) {
     return g_sdl.GameControllerGetAxis(g_controller, axis);
 }
 
+static int input_trigger(int axis) {
+    return input_axis_raw(axis) > TRIGGER_THRESHOLD;
+}
+
 static int input_hat(uint8_t mask) {
     return (g_hat_mask & mask) != 0;
 }
@@ -243,48 +296,6 @@ static int input_dpad_left(void) {
 
 static int input_dpad_right(void) {
     return input_button(SDL_BUTTON_DPAD_RIGHT) || input_hat(SDL_HAT_RIGHT);
-}
-
-static void input_log_button_changes(void) {
-    static const struct {
-        int button;
-        const char *name;
-    } buttons[] = {
-        {SDL_BUTTON_A, "A"},
-        {SDL_BUTTON_B, "B"},
-        {SDL_BUTTON_X, "X"},
-        {SDL_BUTTON_Y, "Y"},
-        {SDL_BUTTON_BACK, "Back/Select"},
-        {SDL_BUTTON_START, "Start"},
-        {SDL_BUTTON_LEFTSTICK, "LeftStick"},
-        {SDL_BUTTON_RIGHTSTICK, "RightStick"},
-        {SDL_BUTTON_LEFTSHOULDER, "LeftShoulder"},
-        {SDL_BUTTON_RIGHTSHOULDER, "RightShoulder"},
-        {SDL_BUTTON_DPAD_UP, "DpadUp"},
-        {SDL_BUTTON_DPAD_DOWN, "DpadDown"},
-        {SDL_BUTTON_DPAD_LEFT, "DpadLeft"},
-        {SDL_BUTTON_DPAD_RIGHT, "DpadRight"},
-    };
-
-    for (size_t i = 0; i < ARRAY_SIZE(buttons); ++i) {
-        int button = buttons[i].button;
-        uint8_t down = (uint8_t)input_button(button);
-        if (g_log_initialized && g_logged_button_state[button] != down) {
-            fprintf(stderr, "[input] button %-13s sdl=%d %s\n", buttons[i].name, button,
-                    down ? "down" : "up");
-        }
-        g_logged_button_state[button] = down;
-    }
-
-    if (g_log_initialized && g_logged_hat_mask != g_hat_mask) {
-        fprintf(stderr, "[input] hat mask=0x%02x%s%s%s%s\n", g_hat_mask,
-                (g_hat_mask & SDL_HAT_UP) ? " up" : "",
-                (g_hat_mask & SDL_HAT_RIGHT) ? " right" : "",
-                (g_hat_mask & SDL_HAT_DOWN) ? " down" : "",
-                (g_hat_mask & SDL_HAT_LEFT) ? " left" : "");
-    }
-    g_logged_hat_mask = g_hat_mask;
-    g_log_initialized = 1;
 }
 
 static int32_t input_axis_deadzone(int axis, int32_t deadzone) {
@@ -445,7 +456,6 @@ static void keyboard_set_key(uint32_t key, int down, int dispatch_callback) {
         g_keyboard_state[key] &= (uint8_t)~KEY_STATE_PRESSED;
         g_keyboard_state[key] |= KEY_STATE_RELEASED;
     }
-
     if (dispatch_callback) {
         keyboard_dispatch_event(key, down);
     }
@@ -460,6 +470,35 @@ static void keyboard_set_keys(const uint32_t *keys, size_t count, int down, int 
 static void keyboard_clear_transitions(void) {
     for (size_t key = 0; key < ARRAY_SIZE(g_keyboard_state); ++key) {
         g_keyboard_state[key] &= (uint8_t)~(KEY_STATE_PRESSED | KEY_STATE_RELEASED);
+    }
+}
+
+static uint32_t keyboard_abs_target(uint32_t key) {
+    switch (key) {
+    case S3E_KEY_ABS_GAME_A:
+        return BINDING_KEY_ACTION_SPRINT;
+    case S3E_KEY_ABS_GAME_B:
+        return BINDING_KEY_RELOAD;
+    case S3E_KEY_ABS_GAME_C:
+        return BINDING_KEY_THROW_GRENADE;
+    case S3E_KEY_ABS_GAME_D:
+        return BINDING_KEY_MELEE;
+    case S3E_KEY_ABS_UP:
+        return BINDING_KEY_TACTICAL_GRENADE;
+    case S3E_KEY_ABS_DOWN:
+        return BINDING_KEY_CROUCH_PRONE;
+    case S3E_KEY_ABS_LEFT:
+        return BINDING_KEY_ALTERNATE_FIRE;
+    case S3E_KEY_ABS_RIGHT:
+        return BINDING_KEY_CHANGE_WEAPON;
+    case S3E_KEY_ABS_OK:
+        return BINDING_KEY_ACTION_SPRINT;
+    case S3E_KEY_ABS_ASK:
+        return XPERIA_KEY_PAUSE;
+    case S3E_KEY_ABS_BSK:
+        return BINDING_KEY_RELOAD;
+    default:
+        return key;
     }
 }
 
@@ -589,7 +628,21 @@ static void input_update_cursor(uint64_t dt) {
 static void input_update_game_keys(void) {
     g_prev_a = input_button(SDL_BUTTON_A);
 
+    game_action_apply(input_button(SDL_BUTTON_A), &KEYMAP_ACTION);
+    game_action_apply(input_button(SDL_BUTTON_B), &KEYMAP_RELOAD);
     game_action_apply(input_button(SDL_BUTTON_X), &KEYMAP_MELEE);
+    game_action_apply(input_button(SDL_BUTTON_Y), &KEYMAP_GRENADE);
+    game_action_apply(input_button(SDL_BUTTON_LEFTSHOULDER) ||
+                          input_trigger(SDL_AXIS_TRIGGERLEFT),
+                      &KEYMAP_AIM);
+    game_action_apply(input_button(SDL_BUTTON_RIGHTSHOULDER) ||
+                          input_trigger(SDL_AXIS_TRIGGERRIGHT),
+                      &KEYMAP_SHOOT);
+    game_action_apply(input_button(SDL_BUTTON_START), &KEYMAP_START);
+    game_action_apply(input_dpad_up(), &KEYMAP_TACTICAL);
+    game_action_apply(input_dpad_down(), &KEYMAP_CROUCH);
+    game_action_apply(input_dpad_left(), &KEYMAP_ALT_FIRE);
+    game_action_apply(input_dpad_right(), &KEYMAP_CHANGE_WEAPON);
 }
 
 static void input_update_game_touchpads(void) {
@@ -600,14 +653,6 @@ static void input_update_game_touchpads(void) {
                           width / 5, center_y, width / 5, height / 2);
     touchpad_update_stick(1, input_xperia_axis(SDL_AXIS_RIGHTX), input_xperia_axis(SDL_AXIS_RIGHTY),
                           (width * 4) / 5, center_y, width / 8, height / 8);
-}
-
-static void keyboard_refresh(uint64_t now) {
-    (void)now;
-    input_pump();
-    if (g_cursor_active || !g_controller) {
-        keyboard_release_all();
-    }
 }
 
 void input_pump(void) {
@@ -622,7 +667,6 @@ void input_pump(void) {
     }
     g_sdl.GameControllerUpdate();
     g_hat_mask = input_current_hat_mask();
-    input_log_button_changes();
 
     uint64_t now = monotonic_ms();
     if (!g_input_last_ms) {
@@ -648,12 +692,16 @@ void input_pump(void) {
 
     if (g_cursor_active) {
         touchpad_release_all();
-        keyboard_release_all();
+        if (g_keyboard_update_active) {
+            keyboard_release_all();
+        }
         input_update_cursor(dt);
     } else {
         input_release_pointer();
         input_update_game_touchpads();
-        input_update_game_keys();
+        if (g_keyboard_update_active) {
+            input_update_game_keys();
+        }
     }
 
 out:
@@ -711,13 +759,19 @@ int32_t s3eKeyboardUnRegister(uint32_t id, void *callback) {
 
 int32_t s3eKeyboardUpdate(void) {
     keyboard_clear_transitions();
-    keyboard_refresh(monotonic_ms());
+    g_keyboard_update_active = 1;
+    input_pump();
+    if (g_cursor_active || !g_controller) {
+        keyboard_release_all();
+    }
+    g_keyboard_update_active = 0;
     dispatch_due_timers();
     return 0;
 }
 
 int32_t s3eKeyboardGetState(uint32_t key) {
-    return key < KEYBOARD_KEY_COUNT ? g_keyboard_state[key] : 0;
+    uint32_t target = keyboard_abs_target(key);
+    return target < KEYBOARD_KEY_COUNT ? g_keyboard_state[target] : 0;
 }
 
 int32_t s3eKeyboardAnyKey(void) {
@@ -752,12 +806,72 @@ int32_t s3eKeyboardSetInt(uint32_t key, int32_t value) {
 
 const char *s3eKeyboardGetDisplayName(uint32_t key) {
     switch (key) {
-    case S3E_KEY_SQUARE:
-        return "Square";
-    case ANDROID_KEYCODE_BUTTON_X:
-        return "Button X";
-    case ANDROID_KEYCODE_X:
-        return "X";
+    case BINDING_KEY_SHOOT:
+        return "BindingShoot";
+    case BINDING_KEY_CHANGE_WEAPON:
+        return "BindingChangeWeapon";
+    case BINDING_KEY_CROUCH_PRONE:
+        return "BindingCrouchProne";
+    case BINDING_KEY_RELOAD:
+        return "BindingReload";
+    case BINDING_KEY_MELEE:
+        return "BindingMelee";
+    case BINDING_KEY_ALTERNATE_FIRE:
+        return "BindingAlternateFire";
+    case BINDING_KEY_AIM:
+        return "BindingAim";
+    case BINDING_KEY_THROW_GRENADE:
+        return "BindingThrowGrenade";
+    case BINDING_KEY_TACTICAL_GRENADE:
+        return "BindingTacticalGrenade";
+    case BINDING_KEY_ACTION_SPRINT:
+        return "BindingActionSprint";
+    case BINDING_KEY_TOGGLE_FREE_MODE:
+        return "BindingToggleFreeMode";
+    case XPERIA_KEY_ALTERNATE_FIRE:
+        return "XperiaAlternateFire";
+    case XPERIA_KEY_TACTICAL_GRENADE:
+        return "XperiaTacticalGrenade";
+    case XPERIA_KEY_CHANGE_WEAPON:
+        return "XperiaChangeWeapon";
+    case XPERIA_KEY_CROUCH_PRONE:
+        return "XperiaCrouchProne";
+    case XPERIA_KEY_AIM:
+        return "XperiaAim";
+    case XPERIA_KEY_SHOOT:
+        return "XperiaShoot";
+    case XPERIA_KEY_ACTION_SPRINT:
+        return "XperiaActionSprint";
+    case XPERIA_KEY_MELEE:
+        return "XperiaMelee";
+    case XPERIA_KEY_THROW_GRENADE:
+        return "XperiaThrowGrenade";
+    case XPERIA_KEY_RELOAD:
+        return "XperiaReload";
+    case XPERIA_KEY_PAUSE:
+        return "XperiaPause";
+    case S3E_KEY_ABS_GAME_A:
+        return "KeyAbsGameA";
+    case S3E_KEY_ABS_GAME_B:
+        return "KeyAbsGameB";
+    case S3E_KEY_ABS_GAME_C:
+        return "KeyAbsGameC";
+    case S3E_KEY_ABS_GAME_D:
+        return "KeyAbsGameD";
+    case S3E_KEY_ABS_UP:
+        return "KeyAbsUp";
+    case S3E_KEY_ABS_DOWN:
+        return "KeyAbsDown";
+    case S3E_KEY_ABS_LEFT:
+        return "KeyAbsLeft";
+    case S3E_KEY_ABS_RIGHT:
+        return "KeyAbsRight";
+    case S3E_KEY_ABS_OK:
+        return "KeyAbsOk";
+    case S3E_KEY_ABS_ASK:
+        return "KeyAbsASK";
+    case S3E_KEY_ABS_BSK:
+        return "KeyAbsBSK";
     default:
         return "";
     }
