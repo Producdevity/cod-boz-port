@@ -192,17 +192,20 @@ int32_t s3eDeviceCheckPauseRequest(void) {
     return 0;
 }
 
+// Used to determine the device type and what controller binding set to use
 int32_t s3eDeviceGetInt(uint32_t key) {
     switch (key) {
     case 0:
-        return 0x12;
+        return 0x12; // XperiaPlayBO
     case 10:
-        return 0x00080101;
+        return 0x00080101; // BOPlayerControlsWin
     default:
-        return 0;
+        return 0; // falls back to BOPlayerControlsWin?
     }
 }
 
+// This doesn't affect the active binding set,
+// but does affect things like hud controller hints
 const char *s3eDeviceGetString(uint32_t key) {
     switch (key) {
     case 0:
