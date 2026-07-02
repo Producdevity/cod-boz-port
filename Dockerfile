@@ -10,7 +10,8 @@ RUN set -eux; \
         file \
         gcc-arm-linux-gnueabihf \
         libc6-dev-armhf-cross \
-        make; \
+        make \
+        zip; \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
