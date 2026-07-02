@@ -15,8 +15,6 @@
 static uintptr_t g_loaded_base;
 static const char g_empty_string[8] __attribute__((aligned(8))) = "";
 static uint32_t g_bucket_allocator_table[33] __attribute__((aligned(8)));
-static unsigned g_null_buffer_write_log_count;
-static unsigned g_null_buffer_slot_log_count;
 
 enum {
     BUCKET_ALLOCATOR_OBJECT_OFFSET = 0x41d498u,
@@ -28,15 +26,13 @@ static void attach_bucket_allocator_table(uint32_t object) {
     *table_slot = (uint32_t)(uintptr_t)g_bucket_allocator_table;
 }
 
-static void prepare_bucket_allocator_table(uint32_t object, const char *reason) {
+static void prepare_bucket_allocator_table(uint32_t object) {
     if (!object) {
         return;
     }
 
     attach_bucket_allocator_table(object);
     memset(g_bucket_allocator_table, 0, sizeof(g_bucket_allocator_table));
-    fprintf(stderr, "compat: prepared bucket table object=0x%08x reason=%s\n", object,
-            reason ? reason : "unknown");
 }
 
 static bool recover_bucket_allocator_fault(ucontext_t *uc) {
@@ -51,9 +47,6 @@ static bool recover_bucket_allocator_fault(ucontext_t *uc) {
         return false;
     }
     if (index >= 32 && pc == g_loaded_base + 0x374be8u) {
-        fprintf(stderr,
-                "compat: reset stale bucket table object=0x%08x bad_index=0x%08x -> index=1\n",
-                object, index);
         index = 1;
     }
     if (index >= 32) {
@@ -69,14 +62,11 @@ static bool recover_bucket_allocator_fault(ucontext_t *uc) {
     uc->uc_mcontext.arm_r5 = object;
 
     if (pc == g_loaded_base + 0x374be8u) {
-        prepare_bucket_allocator_table(object, "fault-reset");
+        prepare_bucket_allocator_table(object);
         uc->uc_mcontext.arm_pc = g_loaded_base + 0x374be8u;
-        fprintf(stderr, "compat: reset stale bucket table object=0x%08x index=%u\n", object, index);
     } else {
         g_bucket_allocator_table[index] = 0;
         uc->uc_mcontext.arm_pc = g_loaded_base + 0x374c34u;
-        fprintf(stderr, "compat: dropped stale bucket node object=0x%08x index=%u\n", object,
-                index);
     }
     return true;
 }
@@ -87,11 +77,6 @@ static bool recover_null_buffer_write(ucontext_t *uc) {
     }
 
     uint32_t *sp = (uint32_t *)(uintptr_t)uc->uc_mcontext.arm_sp;
-    if (g_null_buffer_write_log_count < 1) {
-        fprintf(stderr, "compat: null buffer write at 0x%08lx -> failed write\n",
-                (unsigned long)uc->uc_mcontext.arm_pc);
-        g_null_buffer_write_log_count++;
-    }
     uc->uc_mcontext.arm_r4 = sp[0];
     uc->uc_mcontext.arm_r5 = sp[1];
     uc->uc_mcontext.arm_r6 = sp[2];
@@ -109,10 +94,6 @@ static bool recover_null_buffer_slot(ucontext_t *uc) {
     }
 
     uint32_t *sp = (uint32_t *)(uintptr_t)uc->uc_mcontext.arm_sp;
-    if (g_null_buffer_slot_log_count < 1) {
-        fprintf(stderr, "compat: null buffer slot at 0x%08lx -> failed write\n", (unsigned long)pc);
-        g_null_buffer_slot_log_count++;
-    }
     uc->uc_mcontext.arm_r3 = sp[0];
     uc->uc_mcontext.arm_r4 = sp[1];
     uc->uc_mcontext.arm_r5 = sp[2];
@@ -142,15 +123,11 @@ static void crash_handler(int sig, siginfo_t *info, void *context) {
     }
     if (sig == SIGSEGV && uc->uc_mcontext.arm_pc == g_loaded_base + 0x368ddcu &&
         uc->uc_mcontext.arm_r1 == 0) {
-        fprintf(stderr, "compat: null strcpy source at 0x%08lx -> empty string\n",
-                (unsigned long)uc->uc_mcontext.arm_pc);
         uc->uc_mcontext.arm_r1 = (unsigned long)(uintptr_t)g_empty_string;
         return;
     }
     if (sig == SIGSEGV && uc->uc_mcontext.arm_pc == g_loaded_base + 0x368d2cu &&
         uc->uc_mcontext.arm_r1 == 0) {
-        fprintf(stderr, "compat: null strcpy source at 0x%08lx -> empty string\n",
-                (unsigned long)uc->uc_mcontext.arm_pc);
         uc->uc_mcontext.arm_r1 = (unsigned long)(uintptr_t)g_empty_string;
         return;
     }
@@ -158,15 +135,11 @@ static void crash_handler(int sig, siginfo_t *info, void *context) {
         (uc->uc_mcontext.arm_pc == g_loaded_base + 0x24ba00u ||
          uc->uc_mcontext.arm_pc == g_loaded_base + 0x24ba30u) &&
         uc->uc_mcontext.arm_r0 == 0) {
-        fprintf(stderr, "compat: null hash input at 0x%08lx -> empty string\n",
-                (unsigned long)uc->uc_mcontext.arm_pc);
         uc->uc_mcontext.arm_r0 = (unsigned long)(uintptr_t)g_empty_string;
         return;
     }
     if (sig == SIGSEGV && uc->uc_mcontext.arm_pc == g_loaded_base + 0x368fa4u &&
         uc->uc_mcontext.arm_r1 == 0) {
-        fprintf(stderr, "compat: null strlen input at 0x%08lx -> length 0\n",
-                (unsigned long)uc->uc_mcontext.arm_pc);
         uc->uc_mcontext.arm_r0 = 0;
         uc->uc_mcontext.arm_r2 = 0;
         uc->uc_mcontext.arm_pc = g_loaded_base + 0x369024u;
