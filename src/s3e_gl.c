@@ -202,9 +202,9 @@ static void frontend_cursor_gl_present(void) {
     int y = g_pointer_y;
 
     const int outline_radius = 7;
-    const int outline_thickness = 3;
+    const int outline_thickness = 5;
     const int inner_radius = 5;
-    const int inner_thickness = 1;
+    const int inner_thickness = 3;
 
     gl_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
     cursor_clear_rect(x - outline_radius, y - outline_thickness / 2, outline_radius * 2 + 1,
