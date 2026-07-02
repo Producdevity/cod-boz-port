@@ -193,7 +193,14 @@ int32_t s3eDeviceCheckPauseRequest(void) {
 }
 
 int32_t s3eDeviceGetInt(uint32_t key) {
-    return key == 10 ? 0x00080101 : 0;
+    switch (key) {
+    case 0:
+        return 0x12;
+    case 10:
+        return 0x00080101;
+    default:
+        return 0;
+    }
 }
 
 const char *s3eDeviceGetString(uint32_t key) {
@@ -265,14 +272,13 @@ void s3eDebugTraceLine(const char *text) {
     (void)text;
 }
 
-int32_t s3eDebugAssertShow(const char *file, int32_t line, const char *expr, const char *msg) {
-    fprintf(stderr, "[s3e] assert %s:%d %s %s\n", file ? file : "", line, expr ? expr : "",
-            msg ? msg : "");
+int32_t s3eDebugAssertShow(void) {
     return 0;
 }
 
-int32_t s3eDebugErrorShow(const char *title, const char *text) {
-    fprintf(stderr, "[s3e] error %s %s\n", title ? title : "", text ? text : "");
+int32_t s3eDebugErrorShow(uint32_t flags, const char *text) {
+    (void)flags;
+    (void)text;
     return 0;
 }
 

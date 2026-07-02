@@ -124,19 +124,16 @@ struct sdl_input_api {
     const char *(*GetError)(void);
 };
 
-static const uint32_t KEY_ACTION[] = {BINDING_KEY_ACTION_SPRINT, XPERIA_KEY_ACTION_SPRINT};
-static const uint32_t KEY_RELOAD[] = {BINDING_KEY_RELOAD, XPERIA_KEY_RELOAD};
-static const uint32_t KEY_MELEE[] = {BINDING_KEY_MELEE, XPERIA_KEY_MELEE};
-static const uint32_t KEY_GRENADE[] = {BINDING_KEY_THROW_GRENADE, XPERIA_KEY_THROW_GRENADE};
-static const uint32_t KEY_AIM[] = {BINDING_KEY_AIM, XPERIA_KEY_AIM};
-static const uint32_t KEY_SHOOT[] = {BINDING_KEY_SHOOT, XPERIA_KEY_SHOOT};
-static const uint32_t KEY_TACTICAL[] = {BINDING_KEY_TACTICAL_GRENADE,
-                                        XPERIA_KEY_TACTICAL_GRENADE};
-static const uint32_t KEY_CROUCH[] = {BINDING_KEY_CROUCH_PRONE, XPERIA_KEY_CROUCH_PRONE};
-static const uint32_t KEY_ALT_FIRE[] = {BINDING_KEY_ALTERNATE_FIRE,
-                                        XPERIA_KEY_ALTERNATE_FIRE};
-static const uint32_t KEY_CHANGE_WEAPON[] = {BINDING_KEY_CHANGE_WEAPON,
-                                             XPERIA_KEY_CHANGE_WEAPON};
+static const uint32_t KEY_ACTION[] = {XPERIA_KEY_ACTION_SPRINT};
+static const uint32_t KEY_RELOAD[] = {XPERIA_KEY_RELOAD};
+static const uint32_t KEY_MELEE[] = {XPERIA_KEY_MELEE};
+static const uint32_t KEY_GRENADE[] = {XPERIA_KEY_THROW_GRENADE};
+static const uint32_t KEY_AIM[] = {XPERIA_KEY_AIM};
+static const uint32_t KEY_SHOOT[] = {XPERIA_KEY_SHOOT};
+static const uint32_t KEY_TACTICAL[] = {XPERIA_KEY_TACTICAL_GRENADE};
+static const uint32_t KEY_CROUCH[] = {XPERIA_KEY_CROUCH_PRONE};
+static const uint32_t KEY_ALT_FIRE[] = {XPERIA_KEY_ALTERNATE_FIRE};
+static const uint32_t KEY_CHANGE_WEAPON[] = {XPERIA_KEY_CHANGE_WEAPON};
 static const uint32_t KEY_START[] = {XPERIA_KEY_PAUSE};
 
 #define KEY_MAP(keys) {keys, ARRAY_SIZE(keys)}

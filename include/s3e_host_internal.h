@@ -283,8 +283,8 @@ void s3eDebugPrint(int32_t channel, const char *text, int32_t color);
 int32_t s3eDebugGetInt(uint32_t key);
 int32_t s3eDebugIsDebuggerPresent(void);
 void s3eDebugTraceLine(const char *text);
-int32_t s3eDebugAssertShow(const char *file, int32_t line, const char *expr, const char *msg);
-int32_t s3eDebugErrorShow(const char *title, const char *text);
+int32_t s3eDebugAssertShow(void);
+int32_t s3eDebugErrorShow(uint32_t flags, const char *text);
 
 int32_t s3eKeyboardRegister(uint32_t id, void *callback, void *user_data);
 int32_t s3eKeyboardUnRegister(uint32_t id, void *callback);
