@@ -220,6 +220,7 @@ void *lookup_gl(const char *symbol);
 void *lookup_egl(const char *symbol);
 void input_pump(void);
 void input_shutdown(void);
+void audio_shutdown(void);
 void dispatch_due_timers(void);
 void *make_stub(const char *symbol);
 

@@ -120,6 +120,7 @@ static void close_all_memory_files(void) {
 }
 
 void s3e_host_shutdown(void) {
+    audio_shutdown();
     input_shutdown();
     clear_timers();
     close_all_memory_files();
