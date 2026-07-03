@@ -47,12 +47,16 @@ build/package/ports/codboz/
 
 ## Deploy
 
-After building, copy the loader, extractor, and launcher to a muOS/PortMaster device reachable over SSH:
+After building, deploy the staged package to a PortMaster device reachable over SSH:
 
 ```bash
 scripts/deploy-muos.sh <ssh-host>
+scripts/deploy-knulli.sh <ssh-host>
 ```
 
-The host can also be provided with `CODBOZ_DEPLOY_HOST`.
+The muOS script defaults to `/mnt/mmc` and also supports `--sdcard`.
+
+The KNULLI script defaults to KNULLI's active storage (`/userdata/roms`)
+It also supports `--share`, `--roms`, and `--root PATH`.
 
 The deploy script installs from the staged package tree. Run `scripts/build-docker.sh` first.
