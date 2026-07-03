@@ -6,16 +6,18 @@ enum {
     MIX_INIT_MP3 = 0x00000008u,
     MIX_MAX_VOLUME = 128,
     S3E_MAX_VOLUME = 256,
-    SOUND_CHANNELS = 32,
+    SOUND_CHANNELS = 24,
     AUDIO_STATUS_STOPPED = 0,
     AUDIO_STATUS_PLAYING = 1,
     AUDIO_STATUS_PAUSED = 2,
     IMA_ADPCM_BLOCK_BYTES = 512,
     SOUND_FREQUENCY = 22050,
-    SOUND_RATE_DEFAULT = 0x10000,
+    SOUND_RATE_DEFAULT = 22050,
+    SOUND_RATE_SCALE_DEFAULT = 0x10000,
     SOUND_RATE_MAX = 0x40000,
     SOUND_OUTPUT_CHANNELS = 2,
     SOUND_BUFFER_SAMPLES = 1024,
+    WAV_HEADER_BYTES = 44,
 };
 
 struct sdl_audio_api {
@@ -38,7 +40,7 @@ struct sdl_mixer_api {
     void (*Pause)(int channel);
     void (*Resume)(int channel);
     int (*Volume)(int channel, int volume);
-    void *(*QuickLoad_RAW)(uint8_t *mem, uint32_t len);
+    void *(*LoadWAV_RW)(void *src, int freesrc);
     void (*FreeChunk)(void *chunk);
     void *(*LoadMUS)(const char *file);
     void *(*LoadMUS_RW)(void *rw, int freesrc);
@@ -53,7 +55,6 @@ struct sdl_mixer_api {
 };
 
 struct sound_slot {
-    uint8_t *data;
     void *chunk;
     int finished;
     int volume_s3e;
@@ -170,7 +171,7 @@ static void init_sound_slots(void) {
         g_sound_slots[channel].volume_s3e = S3E_MAX_VOLUME;
         g_sound_slots[channel].volume_mix = MIX_MAX_VOLUME;
         g_sound_slots[channel].rate = SOUND_RATE_DEFAULT;
-        g_sound_slots[channel].rate_scale = SOUND_RATE_DEFAULT;
+        g_sound_slots[channel].rate_scale = SOUND_RATE_SCALE_DEFAULT;
     }
     g_sound_slots_initialized = 1;
 }
@@ -187,7 +188,7 @@ static int rate_from_scale(int scale) {
 }
 
 static int looks_like_ima_adpcm(const uint8_t *data, size_t byte_count) {
-    if (!data || byte_count < IMA_ADPCM_BLOCK_BYTES) {
+    if (!data || byte_count < 4) {
         return 0;
     }
 
@@ -207,11 +208,6 @@ static int looks_like_ima_adpcm(const uint8_t *data, size_t byte_count) {
         offset += block_size;
     }
     return 1;
-}
-
-static void write_stereo_sample(int16_t **dst, int16_t sample) {
-    *(*dst)++ = sample;
-    *(*dst)++ = sample;
 }
 
 static int decode_ima_nibble(int nibble, int *predictor, int *step_index) {
@@ -243,35 +239,31 @@ static int decode_ima_nibble(int nibble, int *predictor, int *step_index) {
     return *predictor;
 }
 
-static uint8_t *decode_ima_adpcm_stereo(const uint8_t *data, size_t byte_count,
-                                        uint32_t *out_byte_count) {
+static int16_t *decode_ima_adpcm_mono(const uint8_t *data, size_t byte_count,
+                                      uint32_t *out_samples) {
     if (!looks_like_ima_adpcm(data, byte_count)) {
         return NULL;
     }
 
-    size_t output_samples = 0;
+    size_t samples = 0;
     for (size_t offset = 0; offset < byte_count;) {
         size_t block_size = byte_count - offset;
         if (block_size > IMA_ADPCM_BLOCK_BYTES) {
             block_size = IMA_ADPCM_BLOCK_BYTES;
         }
-        size_t block_output = (1u + (block_size - 4u) * 2u) * SOUND_OUTPUT_CHANNELS;
-        if (output_samples > SIZE_MAX - block_output) {
+        if (samples > UINT32_MAX - (1u + (block_size - 4u) * 2u)) {
             return NULL;
         }
-        output_samples += block_output;
+        samples += 1u + (block_size - 4u) * 2u;
         offset += block_size;
     }
-    if (output_samples > UINT32_MAX / sizeof(int16_t)) {
+
+    int16_t *pcm = malloc(samples * sizeof(int16_t));
+    if (!pcm) {
         return NULL;
     }
 
-    uint8_t *buffer = malloc(output_samples * sizeof(int16_t));
-    if (!buffer) {
-        return NULL;
-    }
-
-    int16_t *dst = (int16_t *)buffer;
+    int16_t *dst = pcm;
     for (size_t offset = 0; offset < byte_count;) {
         size_t block_size = byte_count - offset;
         if (block_size > IMA_ADPCM_BLOCK_BYTES) {
@@ -281,38 +273,63 @@ static uint8_t *decode_ima_adpcm_stereo(const uint8_t *data, size_t byte_count,
         const uint8_t *src = data + offset;
         int predictor = (int16_t)((uint16_t)src[0] | ((uint16_t)src[1] << 8));
         int step_index = src[2];
-        write_stereo_sample(&dst, (int16_t)predictor);
+        *dst++ = (int16_t)predictor;
 
         for (size_t i = 4; i < block_size; ++i) {
             uint8_t byte = src[i];
-            write_stereo_sample(&dst, decode_ima_nibble(byte & 0x0f, &predictor, &step_index));
-            write_stereo_sample(&dst, decode_ima_nibble(byte >> 4, &predictor, &step_index));
+            *dst++ = (int16_t)decode_ima_nibble(byte & 0x0f, &predictor, &step_index);
+            *dst++ = (int16_t)decode_ima_nibble(byte >> 4, &predictor, &step_index);
         }
         offset += block_size;
     }
 
-    *out_byte_count = (uint32_t)(output_samples * sizeof(int16_t));
-    return buffer;
+    *out_samples = (uint32_t)samples;
+    return pcm;
 }
 
-static uint8_t *copy_pcm16_mono_to_stereo(const int16_t *data, uint32_t samples,
-                                          uint32_t *out_byte_count) {
-    if (!data || samples == 0 || samples > UINT32_MAX / 4u) {
+static void write_le16(uint8_t *dst, uint16_t value) {
+    dst[0] = (uint8_t)(value & 0xffu);
+    dst[1] = (uint8_t)(value >> 8);
+}
+
+static void write_le32(uint8_t *dst, uint32_t value) {
+    dst[0] = (uint8_t)(value & 0xffu);
+    dst[1] = (uint8_t)((value >> 8) & 0xffu);
+    dst[2] = (uint8_t)((value >> 16) & 0xffu);
+    dst[3] = (uint8_t)(value >> 24);
+}
+
+static uint8_t *create_pcm16_mono_wav(const int16_t *data, uint32_t samples, int sample_rate,
+                                      uint32_t *out_byte_count) {
+    if (!data || samples == 0 || samples > (UINT32_MAX - WAV_HEADER_BYTES) / sizeof(int16_t)) {
         return NULL;
     }
+    if (sample_rate <= 0 || sample_rate > SOUND_RATE_MAX) {
+        sample_rate = SOUND_RATE_DEFAULT;
+    }
 
-    size_t byte_count = (size_t)samples * SOUND_OUTPUT_CHANNELS * sizeof(int16_t);
+    uint32_t data_size = samples * (uint32_t)sizeof(int16_t);
+    uint32_t byte_count = WAV_HEADER_BYTES + data_size;
     uint8_t *buffer = malloc(byte_count);
     if (!buffer) {
         return NULL;
     }
 
-    int16_t *dst = (int16_t *)buffer;
-    for (uint32_t i = 0; i < samples; ++i) {
-        write_stereo_sample(&dst, data[i]);
-    }
+    memcpy(buffer, "RIFF", 4);
+    write_le32(buffer + 4, byte_count - 8u);
+    memcpy(buffer + 8, "WAVEfmt ", 8);
+    write_le32(buffer + 16, 16);
+    write_le16(buffer + 20, 1);
+    write_le16(buffer + 22, 1);
+    write_le32(buffer + 24, (uint32_t)sample_rate);
+    write_le32(buffer + 28, (uint32_t)sample_rate * sizeof(int16_t));
+    write_le16(buffer + 32, sizeof(int16_t));
+    write_le16(buffer + 34, 16);
+    memcpy(buffer + 36, "data", 4);
+    write_le32(buffer + 40, data_size);
+    memcpy(buffer + WAV_HEADER_BYTES, data, data_size);
 
-    *out_byte_count = (uint32_t)byte_count;
+    *out_byte_count = byte_count;
     return buffer;
 }
 
@@ -324,8 +341,6 @@ static void free_sound_slot(int channel) {
     if (slot->chunk && g_mixer.FreeChunk) {
         g_mixer.FreeChunk(slot->chunk);
     }
-    free(slot->data);
-    slot->data = NULL;
     slot->chunk = NULL;
     slot->finished = 0;
 }
@@ -385,7 +400,7 @@ static int audio_open(void) {
     ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.Pause, "Mix_Pause");
     ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.Resume, "Mix_Resume");
     ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.Volume, "Mix_Volume");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.QuickLoad_RAW, "Mix_QuickLoad_RAW");
+    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.LoadWAV_RW, "Mix_LoadWAV_RW");
     ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.FreeChunk, "Mix_FreeChunk");
     ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.LoadMUS, "Mix_LoadMUS");
     load_optional_symbol(g_sdl_mixer, (void **)&g_mixer.LoadMUS_RW, "Mix_LoadMUS_RW");
@@ -661,6 +676,11 @@ int32_t s3eSoundSetInt(uint32_t key, int32_t value) {
     }
     if (key == 2) {
         g_sound_rate = clamp_rate(value);
+        for (int channel = 0; channel < SOUND_CHANNELS; ++channel) {
+            if (!g_sound_slots[channel].chunk) {
+                g_sound_slots[channel].rate = g_sound_rate;
+            }
+        }
         return 0;
     }
     return 1;
@@ -670,6 +690,8 @@ int32_t s3eSoundGetInt(uint32_t key) {
     switch (key) {
     case 0:
         return g_sound_volume_s3e;
+    case 1:
+        return SOUND_FREQUENCY;
     case 2:
         return g_sound_rate;
     case 3:
@@ -710,30 +732,40 @@ int32_t s3eSoundChannelPlay(int32_t channel, const void *data, uint32_t size, ui
         return 1;
     }
 
-    uint32_t byte_count = 0;
-    uint8_t *copy = decode_ima_adpcm_stereo(data, (size_t)size * sizeof(int16_t), &byte_count);
-    if (!copy) {
-        copy = copy_pcm16_mono_to_stereo(data, size, &byte_count);
-    }
-    if (!copy) {
+    struct sound_slot *slot = &g_sound_slots[channel];
+    uint32_t pcm_samples = size;
+    int16_t *decoded = decode_ima_adpcm_mono(data, (size_t)size * sizeof(int16_t), &pcm_samples);
+    const int16_t *pcm = decoded ? decoded : data;
+
+    uint32_t wav_size = 0;
+    uint8_t *wav = create_pcm16_mono_wav(pcm, pcm_samples, slot->rate, &wav_size);
+    free(decoded);
+    if (!wav) {
         return 1;
     }
 
-    void *chunk = g_mixer.QuickLoad_RAW(copy, byte_count);
+    void *rw = g_sdl_audio.RWFromConstMem(wav, (int)wav_size);
+    if (!rw) {
+        free(wav);
+        return 1;
+    }
+
+    void *chunk = g_mixer.LoadWAV_RW(rw, 1);
+    free(wav);
     if (!chunk) {
-        free(copy);
+        fprintf(stderr, "[audio] sound load failed: %s\n", mixer_error());
         return 1;
     }
 
     g_mixer.HaltChannel(channel);
     free_sound_slot(channel);
-    g_sound_slots[channel].data = copy;
-    g_sound_slots[channel].chunk = chunk;
-    g_sound_slots[channel].finished = 0;
-    g_mixer.Volume(channel, mixed_channel_volume(&g_sound_slots[channel]));
+    slot->chunk = chunk;
+    slot->finished = 0;
+    g_mixer.Volume(channel, mixed_channel_volume(slot));
 
     int played_channel = g_mixer.PlayChannelTimed(channel, chunk, repeat ? -1 : 0, -1);
     if (played_channel < 0) {
+        fprintf(stderr, "[audio] sound play failed: %s\n", mixer_error());
         free_sound_slot(channel);
         return 1;
     }
@@ -779,7 +811,6 @@ int32_t s3eSoundChannelSetInt(int32_t channel, uint32_t key, int32_t value) {
         return 0;
     case 1:
         slot->rate = clamp_rate(value);
-        slot->rate_scale = slot->rate;
         return 0;
     case 2:
         slot->position = value;
