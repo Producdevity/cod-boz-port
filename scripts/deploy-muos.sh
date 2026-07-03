@@ -53,6 +53,11 @@ loader="$port_payload/codboz_s3e_loader"
 extractor="$port_payload/codboz_apk_extract"
 launcher="$package_dir/CODBOZ.sh"
 setup_script="$port_payload/codboz_setup.sh"
+gameinfo="$package_dir/gameinfo.xml"
+cover="$package_dir/cover.png"
+screenshot="$package_dir/screenshot.png"
+sdl2_lib="$port_payload/libs.armhf/libSDL2-2.0.so.0"
+sdl2_mixer_lib="$port_payload/libs.armhf/libSDL2_mixer-2.0.so.0"
 
 if [ ! -d "$package_dir" ]; then
   echo "Missing package staging directory: $package_dir" >&2
@@ -68,7 +73,7 @@ for required in "$loader" "$extractor" "$setup_script"; do
   fi
 done
 
-for required in "$launcher" "$package_dir/port.json" "$package_dir/README.md" "$package_dir/gameinfo.xml"; do
+for required in "$launcher" "$package_dir/port.json" "$package_dir/README.md" "$gameinfo" "$cover" "$screenshot" "$sdl2_lib" "$sdl2_mixer_lib"; do
   if [ ! -f "$required" ]; then
     echo "Missing packaging file: $required" >&2
     echo "Run scripts/build-docker.sh first." >&2
@@ -94,11 +99,18 @@ set -e
 gamedir="$1"
 portdir="$2"
 mkdir -p "$gamedir" "$gamedir/apk" "$gamedir/assets" "$portdir"
+mkdir -p "$gamedir/libs.armhf" "$gamedir/licenses"
 REMOTE_MKDIR
 scp "$loader" "$host:$gamedir/codboz_s3e_loader.tmp"
 scp "$extractor" "$host:$gamedir/codboz_apk_extract.tmp"
 scp "$setup_script" "$host:$gamedir/codboz_setup.sh.tmp"
 scp "$launcher" "$host:$portdir/CODBOZ.sh.tmp"
+scp "$gameinfo" "$host:$gamedir/gameinfo.xml.tmp"
+scp "$cover" "$host:$gamedir/cover.png.tmp"
+scp "$screenshot" "$host:$gamedir/screenshot.png.tmp"
+scp "$sdl2_lib" "$host:$gamedir/libs.armhf/libSDL2-2.0.so.0.tmp"
+scp "$sdl2_mixer_lib" "$host:$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0.tmp"
+scp "$port_payload/licenses/"*.txt "$host:$gamedir/licenses/"
 ssh "$host" 'sh -s' -- "$gamedir" "$portdir" <<'REMOTE'
 set -e
 gamedir="$1"
@@ -114,8 +126,15 @@ mv "$gamedir/codboz_s3e_loader.tmp" "$gamedir/codboz_s3e_loader"
 mv "$gamedir/codboz_apk_extract.tmp" "$gamedir/codboz_apk_extract"
 mv "$gamedir/codboz_setup.sh.tmp" "$gamedir/codboz_setup.sh"
 mv "$portdir/CODBOZ.sh.tmp" "$portdir/CODBOZ.sh"
+mv "$gamedir/gameinfo.xml.tmp" "$gamedir/gameinfo.xml"
+mv "$gamedir/cover.png.tmp" "$gamedir/cover.png"
+mv "$gamedir/screenshot.png.tmp" "$gamedir/screenshot.png"
+mv "$gamedir/libs.armhf/libSDL2-2.0.so.0.tmp" "$gamedir/libs.armhf/libSDL2-2.0.so.0"
+mv "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0.tmp" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0"
 chmod 755 "$gamedir/codboz_s3e_loader" "$gamedir/codboz_apk_extract" "$gamedir/codboz_setup.sh" "$portdir/CODBOZ.sh"
+chmod 644 "$gamedir/gameinfo.xml" "$gamedir/cover.png" "$gamedir/screenshot.png" "$gamedir/libs.armhf/libSDL2-2.0.so.0" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0" "$gamedir/licenses/"*.txt
 ls -l "$gamedir/codboz_s3e_loader" "$gamedir/codboz_apk_extract" "$gamedir/codboz_setup.sh" "$portdir/CODBOZ.sh"
+ls -l "$gamedir/gameinfo.xml" "$gamedir/cover.png" "$gamedir/screenshot.png" "$gamedir/libs.armhf/libSDL2-2.0.so.0" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0"
 
 if [ ! -f "$gamedir/apk/game.apk" ]; then
   echo "Note: place the Android APK at $gamedir/apk/game.apk for first-launch setup." >&2

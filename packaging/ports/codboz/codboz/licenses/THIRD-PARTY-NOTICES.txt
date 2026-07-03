@@ -6,5 +6,9 @@ this port. See LICENSE.Port.txt.
 The setup helper includes the public-domain LZMA SDK decoder. See
 LICENSE.LZMA-SDK.txt.
 
+This package bundles ARMHF builds of SDL2 and SDL2_mixer for input and audio
+portability across supported firmware. See LICENSE.SDL2.txt and
+LICENSE.SDL2_mixer.txt.
+
 This package does not include Call of Duty: Black Ops Zombies game data. The
 user must provide a legally owned Android APK at ports/codboz/apk/game.apk.
