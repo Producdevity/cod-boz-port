@@ -29,7 +29,7 @@ gamedir="/$directory/ports/codboz"
 assetdir="$gamedir/assets"
 apkdir="$gamedir/apk"
 loader="$gamedir/codboz_s3e_loader"
-setup_script="$gamedir/codboz_setup.sh"
+setup_script="$gamedir/codboz_setup"
 s3e="$assetdir/boz.s3e.unpacked"
 installed="$gamedir/.installed"
 savehome="$gamedir/savedata-home"
@@ -96,7 +96,7 @@ require_executable() {
 }
 
 first_run_setup() {
-  require_executable "$setup_script" "Missing Setup Script" "The port install is incomplete: codboz_setup.sh is missing."
+  require_executable "$setup_script" "Missing Setup Script" "The port install is incomplete: codboz_setup is missing."
   require_file "$controlfolder/utils/patcher.txt" "PortMaster Update Required" "This port needs PortMaster's patcher utility. Update PortMaster, then launch again."
 
   export PATCHER_FILE="$setup_script"

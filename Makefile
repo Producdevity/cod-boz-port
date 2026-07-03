@@ -56,7 +56,7 @@ package: all
 	cp $(LOADER_TARGET) $(PORT_PAYLOAD_DIR)/
 	cp $(EXTRACT_TARGET) $(PORT_PAYLOAD_DIR)/
 	chmod 755 $(PORT_PACKAGE_DIR)/CODBOZ.sh
-	chmod 755 $(PORT_PAYLOAD_DIR)/codboz_setup.sh
+	chmod 755 $(PORT_PAYLOAD_DIR)/codboz_setup
 	chmod 755 $(PORT_PAYLOAD_DIR)/codboz_s3e_loader
 	chmod 755 $(PORT_PAYLOAD_DIR)/codboz_apk_extract
 	find $(PACKAGE_DIR) -name .DS_Store -delete

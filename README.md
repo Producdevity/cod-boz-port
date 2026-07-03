@@ -14,7 +14,7 @@ Place your legally owned Android APK on the device at:
 ports/codboz/apk/game.apk
 ```
 
-On first launch, PortMaster's patcher UI runs `ports/codboz/codboz_setup.sh`. The setup extracts the bundled Marmalade payload and music assets into `ports/codboz/assets`, decompresses `boz.s3e` to `boz.s3e.unpacked`, reads the resource CDN from that unpacked payload, and downloads the required `.dz` archives into `ports/codboz/assets`.
+On first launch, PortMaster's patcher UI runs `ports/codboz/codboz_setup`. The setup extracts the bundled Marmalade payload and music assets into `ports/codboz/assets`, decompresses `boz.s3e` to `boz.s3e.unpacked`, reads the resource CDN from that unpacked payload, and downloads the required `.dz` archives into `ports/codboz/assets`.
 
 The expected APK version is `1.0.11` with SHA-256:
 
