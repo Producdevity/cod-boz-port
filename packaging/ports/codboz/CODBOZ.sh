@@ -126,9 +126,12 @@ require_file "$s3e" "Missing Game Data" "Setup did not create assets/boz.s3e.unp
 end_splash
 
 export HOME="$savehome"
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}"
-export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-/run}"
-export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/dbus/system_bus_socket}"
+
+if [ "${CFW_NAME:-}" = "knulli" ] && [ -S /var/run/pipewire-0 ]; then
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run}"
+  export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-/var/run}"
+fi
+
 [ -z "${SPA_PLUGIN_DIR:-}" ] && [ -d /usr/lib32/spa-0.2 ] && export SPA_PLUGIN_DIR=/usr/lib32/spa-0.2
 [ -z "${PIPEWIRE_MODULE_DIR:-}" ] && [ -d /usr/lib32/pipewire-0.3 ] && export PIPEWIRE_MODULE_DIR=/usr/lib32/pipewire-0.3
 [ -z "${ALSA_CONFIG:-}" ] && [ -f /usr/share/alsa/alsa.conf ] && export ALSA_CONFIG=/usr/share/alsa/alsa.conf
