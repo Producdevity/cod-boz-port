@@ -28,6 +28,10 @@ apk="$apkdir/game.apk"
 s3e="$assetdir/boz.s3e.unpacked"
 installed="$gamedir/.installed"
 setup_log="$gamedir/setup.log"
+extract_log="$gamedir/extract.log"
+expected_apk_sha256="359ee68b6e0a3a66e921ec9b955b290dedb93135fd3c20904bc1bb6f47b5499d"
+expected_blackops_etc_sha256="670cefce1951f1fb710d9c9d00d6103f4b81379c414885057af450a897baaedc"
+expected_blackops_gles1_sha256="60846cf7a121ebaa200be82bd6811adcec44c607414b41086a6ffa1bd339b12c"
 
 mkdir -p "$assetdir" "$apkdir"
 : > "$setup_log"
@@ -71,30 +75,151 @@ file_size() {
   wc -c < "$1" | tr -d ' '
 }
 
+status() {
+  echo "Status: $1"
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    return 1
+  fi
+}
+
+verify_apk() {
+  status "Checking APK..."
+  actual_sha256="$(sha256_file "$apk")" || fail "Could not verify game.apk. SHA-256 tool is missing."
+  printf 'game.apk SHA-256: %s\n' "$actual_sha256" >> "$setup_log"
+  if [ "$actual_sha256" != "$expected_apk_sha256" ]; then
+    fail "APK checksum mismatch. Use the supported Android 1.0.11 APK, then launch again."
+  fi
+  status "APK checksum OK."
+}
+
 has_game_data() {
   [ -f "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
 }
 
-download_file() {
+archive_sha256() {
+  case "$1" in
+    blackops_etc.dz)
+      echo "$expected_blackops_etc_sha256"
+      ;;
+    blackops_gles1.dz)
+      echo "$expected_blackops_gles1_sha256"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+verify_archive() {
   name="$1"
+  file="$2"
+  expected_sha256="$(archive_sha256 "$name")" || fail "No checksum configured for $name."
+  actual_sha256="$(sha256_file "$file")" || fail "Could not verify $name. SHA-256 tool is missing."
+  printf '%s SHA-256: %s\n' "$name" "$actual_sha256" >> "$setup_log"
+  [ "$actual_sha256" = "$expected_sha256" ]
+}
+
+remote_size() {
+  url="$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsIL --connect-timeout 15 --max-time 30 "$url" 2>/dev/null |
+      awk 'tolower($1) == "content-length:" {len=$2} END {gsub("\r", "", len); if (len ~ /^[0-9]+$/) print len; else exit 1}'
+    return $?
+  fi
+  if command -v wget >/dev/null 2>&1 && wget --help 2>&1 | grep -q -- '--spider'; then
+    wget -q --spider -S -T 15 "$url" 2>&1 |
+      awk 'tolower($1) == "content-length:" {len=$2} END {gsub("\r", "", len); if (len ~ /^[0-9]+$/) print len; else exit 1}'
+    return $?
+  fi
+  return 1
+}
+
+can_probe_url() {
+  url="$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fIL --connect-timeout 15 --max-time 30 "$url" >/dev/null 2>&1
+    return $?
+  fi
+  if command -v wget >/dev/null 2>&1 && wget --help 2>&1 | grep -q -- '--spider'; then
+    wget -q --spider -T 15 "$url" >/dev/null 2>&1
+    return $?
+  fi
+  return 2
+}
+
+has_basic_network() {
+  if command -v ping >/dev/null 2>&1; then
+    ping -c 1 -W 5 1.1.1.1 >/dev/null 2>&1 && return 0
+    ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+check_network() {
+  probe_url="${cdn_base%/}/blackops_etc.dz"
+  status "Checking network..."
+  can_probe_url "$probe_url"
+  probe_status=$?
+  if [ "$probe_status" -eq 0 ]; then
+    status "Network connection OK."
+    return 0
+  fi
+  if has_basic_network; then
+    status "Network check OK. CDN will be verified during download."
+    return 0
+  fi
+  if [ "$probe_status" -eq 2 ]; then
+    status "Network preflight unavailable. Download will verify it."
+    return 0
+  fi
+  fail "Network connection required. Connect this device to Wi-Fi, then launch again."
+}
+
+download_file_once() {
+  name="$1"
+  index="$2"
+  total_archives="$3"
+  attempt="$4"
   url="${cdn_base%/}/$name"
   target="$assetdir/$name"
   tmp="$target.part"
 
-  if [ -s "$target" ]; then
-    echo "$name already exists."
-    return 0
-  fi
-
   rm -f "$tmp"
-  echo "Downloading $name..."
+  if [ "$attempt" -eq 1 ]; then
+    status "Downloading resources ($index/$total_archives): $name"
+  else
+    status "Retrying resources ($index/$total_archives): $name"
+  fi
+  total_size="$(remote_size "$url" 2>/dev/null || true)"
   if command -v wget >/dev/null 2>&1; then
-    wget -O "$tmp" "$url" || fail "Could not download $name."
+    wget -q -O "$tmp" "$url" &
   elif command -v curl >/dev/null 2>&1; then
-    curl -fL --retry 3 --connect-timeout 20 -o "$tmp" "$url" || fail "Could not download $name."
+    curl -fLsS --retry 3 --connect-timeout 20 -o "$tmp" "$url" &
   else
     fail "Downloader missing. Install wget or curl, then launch this port again."
   fi
+
+  download_pid=$!
+  next_progress=10
+  while kill -0 "$download_pid" 2>/dev/null; do
+    if [ -n "$total_size" ] && [ "$total_size" -gt 0 ] && [ -f "$tmp" ]; then
+      current_size="$(file_size "$tmp")"
+      progress=$((current_size * 100 / total_size))
+      while [ "$progress" -ge "$next_progress" ] && [ "$next_progress" -lt 100 ]; do
+        status "$name $next_progress%"
+        next_progress=$((next_progress + 10))
+      done
+    fi
+    sleep 2
+  done
+  wait "$download_pid" || fail "Could not download $name."
 
   if [ ! -s "$tmp" ]; then
     rm -f "$tmp"
@@ -102,20 +227,68 @@ download_file() {
   fi
 
   mv "$tmp" "$target" || fail "Could not store $name."
-  echo "Downloaded $name ($(file_size "$target") bytes)."
+  status "$name complete ($(file_size "$target") bytes)."
 }
 
-if has_game_data; then
-  touch "$installed" || fail "Could not mark setup complete."
-  echo "Game data already exists. OK"
-  exit 0
-fi
+download_file() {
+  name="$1"
+  index="$2"
+  total_archives="$3"
+  target="$assetdir/$name"
+  tmp="$target.part"
+
+  if [ -s "$target" ]; then
+    status "Verifying $name..."
+    if verify_archive "$name" "$target"; then
+      status "$name already exists."
+      return 0
+    fi
+    status "$name checksum failed. Redownloading."
+    rm -f "$target"
+  fi
+
+  attempt=1
+  while [ "$attempt" -le 2 ]; do
+    download_file_once "$name" "$index" "$total_archives" "$attempt"
+    status "Verifying $name..."
+    if verify_archive "$name" "$target"; then
+      status "$name verified."
+      return 0
+    fi
+
+    rm -f "$target" "$tmp"
+    if [ "$attempt" -eq 1 ]; then
+      status "$name checksum failed. Retrying once."
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  fail "Checksum failed for $name after retrying."
+}
 
 require_executable "$extractor" "Missing setup helper: codboz_apk_extract."
 require_file "$apk" "Missing APK. Place your Android APK at ports/codboz/apk/game.apk, then launch again."
 
-echo "Extracting game APK..."
-"$extractor" extract "$apk" "$assetdir" || fail "Could not extract game.apk."
+if has_game_data; then
+  status "Verifying existing game data..."
+  if verify_archive blackops_etc.dz "$assetdir/blackops_etc.dz" &&
+    verify_archive blackops_gles1.dz "$assetdir/blackops_gles1.dz"; then
+    touch "$installed" || fail "Could not mark setup complete."
+    status "Game data already exists. OK"
+    exit 0
+  fi
+  status "Existing resource checksum failed. Redownloading."
+  rm -f "$assetdir/blackops_etc.dz" "$assetdir/blackops_gles1.dz" "$installed"
+fi
+
+verify_apk
+
+status "Extracting game APK..."
+if ! "$extractor" extract "$apk" "$assetdir" > "$extract_log" 2>&1; then
+  cat "$extract_log"
+  fail "Could not extract game.apk."
+fi
+status "APK extraction complete."
 
 require_file "$s3e" "boz.s3e.unpacked was not created from game.apk."
 
@@ -124,9 +297,13 @@ if [ -z "$cdn_base" ]; then
   fail "Could not find the game resource CDN in game.apk."
 fi
 
-echo "Resource CDN found."
+status "Resource CDN found."
+check_network
+archive_index=1
+archive_count=2
 for archive in blackops_etc.dz blackops_gles1.dz; do
-  download_file "$archive"
+  download_file "$archive" "$archive_index" "$archive_count"
+  archive_index=$((archive_index + 1))
 done
 
 if ! has_game_data; then
@@ -134,4 +311,4 @@ if ! has_game_data; then
 fi
 
 touch "$installed" || fail "Could not mark setup complete."
-echo "Setup complete."
+status "Setup complete."
