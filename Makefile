@@ -9,7 +9,9 @@ PORT_SOURCE_DIR := packaging/ports/codboz
 PORT_PAYLOAD_DIR := $(PORT_PACKAGE_DIR)/codboz
 ZIP := $(BUILD_DIR)/codboz.zip
 CFLAGS ?= -O2 -g
-CFLAGS += -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Iinclude -Ithird_party/lzma
+PROJECT_CPPFLAGS := -D_GNU_SOURCE -Iinclude -Ithird_party/lzma
+PROJECT_CFLAGS := -std=c11 -Wall -Wextra -Werror
+TARGET_CFLAGS ?=
 LDFLAGS ?=
 LOADER_LDLIBS += -ldl -pthread
 
@@ -40,7 +42,7 @@ $(EXTRACT_TARGET): $(EXTRACT_OBJ)
 
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
+	$(CC) $(PROJECT_CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) $(TARGET_CFLAGS) -MMD -MP -c -o $@ $<
 
 $(BUILD_DIR):
 	mkdir -p $@
