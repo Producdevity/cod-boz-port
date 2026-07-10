@@ -1,4 +1,5 @@
 build/
+.idea/
 *.o
 *.d
 .DS_Store
