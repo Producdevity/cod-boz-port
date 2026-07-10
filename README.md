@@ -52,11 +52,14 @@ After building, deploy the staged package to a PortMaster device reachable over 
 ```bash
 scripts/deploy-muos.sh <ssh-host>
 scripts/deploy-knulli.sh <ssh-host>
+scripts/deploy-darkos.sh <ssh-host>
 ```
 
 The muOS script defaults to `/mnt/mmc` and also supports `--sdcard`.
 
-The KNULLI script defaults to KNULLI's active storage (`/userdata/roms`)
+The KNULLI script defaults to KNULLI's active storage (`/userdata/roms`).
 It also supports `--share`, `--roms`, and `--root PATH`.
 
-The deploy script installs from the staged package tree. Run `scripts/build-docker.sh` first.
+The dArkOS/ArkOS script defaults to `/roms` and also supports `--roms2` and `--root PATH`.
+
+The deployment scripts install from the staged package tree. Run `scripts/build-docker.sh` first.
