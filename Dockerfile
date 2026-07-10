@@ -6,8 +6,6 @@ RUN set -eux; \
     echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        ca-certificates \
-        file \
         gcc-arm-linux-gnueabihf \
         libc6-dev-armhf-cross \
         make \
