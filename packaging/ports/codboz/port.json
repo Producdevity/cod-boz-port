@@ -2,7 +2,7 @@
   "version": 4,
   "name": "codboz.zip",
   "items": ["CODBOZ.sh", "codboz"],
-  "items_opt": [],
+  "items_opt": null,
   "attr": {
     "title": "Call of Duty: Black Ops Zombies",
     "porter": ["Producdevity"],
@@ -11,10 +11,10 @@
     "inst": "Requires the Android APK. Copy it to ports/codboz/apk/game.apk, then launch the port to run first-launch setup.",
     "inst_md": "### Android APK Instructions\nCopy your legally owned Android APK to `ports/codboz/apk/game.apk`, then launch the port. First launch extracts the Marmalade payload, downloads the required game resource archives, and prepares `ports/codboz/assets`.",
     "genres": ["fps", "action"],
-    "image": null,
+    "image": {},
     "rtr": false,
     "exp": true,
-    "runtime": null,
+    "runtime": [],
     "store": [
       {
         "name": "Android",
