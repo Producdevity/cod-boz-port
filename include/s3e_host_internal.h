@@ -62,7 +62,6 @@ enum {
 #define IS_DEVICE_RESOURCE_PATH_LEN 0xff
 #define S3E_TOUCHPAD_HASH 0x1dbd7ce8u
 #define IS_DEVICE_HASH 0xe7c6ef51u
-#define S3E_HOST_MUTEX_MAGIC 0x4d555458u
 #define XPERIA_TOUCHPAD_WIDTH 960
 #define XPERIA_TOUCHPAD_HEIGHT 544
 
@@ -126,16 +125,6 @@ struct s3e_user_mem_mgr {
 struct s3e_heap {
     void *base;
     uint32_t size;
-};
-
-struct s3e_host_mutex {
-    uint32_t magic;
-    pthread_mutex_t mutex;
-};
-
-struct s3e_host_thread {
-    uint32_t magic;
-    pthread_t id;
 };
 
 struct s3e_pointer_button_event {
@@ -399,16 +388,8 @@ void *s3eGLGetNativeWindow(void);
 int32_t s3eConfigGetInt(const char *section, const char *key, int32_t *out);
 int32_t s3eConfigGetString(const char *section, const char *key, char *out);
 
-uintptr_t s3eThreadGetCurrent(void);
-void *s3eMutexCreate(void);
-int32_t s3eMutexDestroy(void *handle);
-int32_t s3eMutexAcquire(void *handle, int32_t timeout_ms);
-int32_t s3eMutexRelease(void *handle);
 uintptr_t s3eReturn0(void);
-int32_t s3eReturnMinus1(void);
 uintptr_t s3eStub(void);
-int32_t s3eTouchpadInit(void);
-void s3eTouchpadTerminate(void);
 int32_t s3eTouchpadGetInt(uint32_t key);
 int32_t s3eTouchpadRegister(uint32_t id, void *callback, void *user_data);
 int32_t s3eTouchpadUnRegister(uint32_t id, void *callback);
