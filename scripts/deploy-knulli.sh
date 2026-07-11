@@ -68,7 +68,6 @@ setup_script="$port_payload/codboz_setup"
 gameinfo="$package_dir/gameinfo.xml"
 cover="$package_dir/cover.png"
 screenshot="$package_dir/screenshot.png"
-sdl2_lib="$port_payload/libs.armhf/libSDL2-2.0.so.0"
 sdl2_mixer_lib="$port_payload/libs.armhf/libSDL2_mixer-2.0.so.0"
 
 if [ ! -d "$package_dir" ]; then
@@ -85,7 +84,7 @@ for required in "$loader" "$extractor" "$setup_script"; do
   fi
 done
 
-for required in "$launcher" "$package_dir/port.json" "$package_dir/README.md" "$gameinfo" "$cover" "$screenshot" "$sdl2_lib" "$sdl2_mixer_lib"; do
+for required in "$launcher" "$package_dir/port.json" "$package_dir/README.md" "$gameinfo" "$cover" "$screenshot" "$sdl2_mixer_lib"; do
   if [ ! -f "$required" ]; then
     echo "Missing packaging file: $required" >&2
     echo "Run scripts/build-docker.sh first." >&2
@@ -125,7 +124,6 @@ scp "$launcher" "$host:$portdir/CODBOZ.sh.tmp"
 scp "$gameinfo" "$host:$gamedir/gameinfo.xml.tmp"
 scp "$cover" "$host:$gamedir/cover.png.tmp"
 scp "$screenshot" "$host:$gamedir/screenshot.png.tmp"
-scp "$sdl2_lib" "$host:$gamedir/libs.armhf/libSDL2-2.0.so.0.tmp"
 scp "$sdl2_mixer_lib" "$host:$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0.tmp"
 scp "$port_payload/licenses/"*.txt "$host:$gamedir/licenses/"
 
@@ -147,12 +145,11 @@ mv "$portdir/CODBOZ.sh.tmp" "$portdir/CODBOZ.sh"
 mv "$gamedir/gameinfo.xml.tmp" "$gamedir/gameinfo.xml"
 mv "$gamedir/cover.png.tmp" "$gamedir/cover.png"
 mv "$gamedir/screenshot.png.tmp" "$gamedir/screenshot.png"
-mv "$gamedir/libs.armhf/libSDL2-2.0.so.0.tmp" "$gamedir/libs.armhf/libSDL2-2.0.so.0"
 mv "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0.tmp" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0"
 chmod 755 "$gamedir/codboz_s3e_loader" "$gamedir/codboz_apk_extract" "$gamedir/codboz_setup" "$portdir/CODBOZ.sh"
-chmod 644 "$gamedir/gameinfo.xml" "$gamedir/cover.png" "$gamedir/screenshot.png" "$gamedir/libs.armhf/libSDL2-2.0.so.0" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0" "$gamedir/licenses/"*.txt
+chmod 644 "$gamedir/gameinfo.xml" "$gamedir/cover.png" "$gamedir/screenshot.png" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0" "$gamedir/licenses/"*.txt
 ls -l "$gamedir/codboz_s3e_loader" "$gamedir/codboz_apk_extract" "$gamedir/codboz_setup" "$portdir/CODBOZ.sh"
-ls -l "$gamedir/gameinfo.xml" "$gamedir/cover.png" "$gamedir/screenshot.png" "$gamedir/libs.armhf/libSDL2-2.0.so.0" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0"
+ls -l "$gamedir/gameinfo.xml" "$gamedir/cover.png" "$gamedir/screenshot.png" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0"
 
 if [ ! -f "$gamedir/apk/game.apk" ]; then
   echo "Note: place the Android APK at $gamedir/apk/game.apk for first-launch setup." >&2
