@@ -19,6 +19,7 @@ LOADER_SRC := \
   src/main.c \
   src/s3e_config.c \
   src/s3e_audio.c \
+  src/s3e_egl.c \
   src/s3e_file.c \
   src/s3e_gl.c \
   src/s3e_host.c \

@@ -61,9 +61,9 @@ void *open_first(const char *const *names) {
 }
 
 void *lookup_gl(const char *symbol) {
-    void *addr = NULL;
+    void *addr = egl_backend_get_gl_proc(symbol);
     if (g_gles2) {
-        addr = dlsym(g_gles2, symbol);
+        addr = addr ? addr : dlsym(g_gles2, symbol);
     }
     if (!addr && g_gles1) {
         addr = dlsym(g_gles1, symbol);
@@ -88,13 +88,7 @@ bool s3e_host_init(const char *root) {
     } else if (!getcwd(g_root, sizeof(g_root))) {
         snprintf(g_root, sizeof(g_root), ".");
     }
-    const char *egl_names[] = {"libEGL.so.1", "libEGL.so", NULL};
-    const char *gles1_names[] = {"libGLESv1_CM.so.1", "libGLESv1_CM.so", "libmali.so", NULL};
-    const char *gles2_names[] = {"libGLESv2.so.2", "libGLESv2.so", "libmali.so", NULL};
-    g_egl = open_first(egl_names);
-    g_gles1 = open_first(gles1_names);
-    g_gles2 = open_first(gles2_names);
-    return true;
+    return egl_backend_load_libraries();
 }
 
 static void clear_timers(void) {
@@ -122,6 +116,7 @@ static void close_all_memory_files(void) {
 void s3e_host_shutdown(void) {
     audio_shutdown();
     input_shutdown();
+    egl_backend_shutdown();
     clear_timers();
     close_all_memory_files();
     for (size_t i = 0; i < sizeof(g_heaps) / sizeof(g_heaps[0]); ++i) {

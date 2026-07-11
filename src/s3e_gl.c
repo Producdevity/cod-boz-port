@@ -140,9 +140,8 @@ static void *host_eglGetProcAddress(const char *procname) {
     if (wrapped) {
         return wrapped;
     }
-
-    void *(*real)(const char *) = lookup_egl("eglGetProcAddress");
-    return real ? real(procname) : NULL;
+    void *egl = egl_backend_resolve(procname);
+    return egl ? egl : egl_backend_get_proc_address(procname);
 }
 
 static void cursor_clear_rect(GLint x, GLint y, GLsizei w, GLsizei h,
@@ -223,11 +222,10 @@ static void frontend_cursor_gl_present(void) {
 }
 
 static EGLBoolean host_eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
-    EGLBoolean (*real)(EGLDisplay, EGLSurface) = lookup_egl("eglSwapBuffers");
     input_pump();
     dispatch_due_timers();
     frontend_cursor_gl_present();
-    EGLBoolean result = real ? real(display, surface) : 0;
+    EGLBoolean result = egl_backend_swap_buffers(display, surface);
     pace_frame();
     return result;
 }
@@ -425,7 +423,10 @@ void *s3e_host_resolve(const char *symbol) {
         return wrapped;
     }
     if (strncmp(symbol, "egl", 3) == 0) {
-        void *addr = lookup_egl(symbol);
+        void *addr = egl_backend_resolve(symbol);
+        if (!addr) {
+            addr = lookup_egl(symbol);
+        }
         return addr ? addr : make_stub(symbol);
     }
     if (strncmp(symbol, "gl", 2) == 0) {
