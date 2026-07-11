@@ -16,6 +16,7 @@ LDFLAGS ?=
 LOADER_LDLIBS += -ldl -pthread
 
 LOADER_SRC := \
+  src/codboz_assets.c \
   src/main.c \
   src/s3e_config.c \
   src/s3e_audio.c \

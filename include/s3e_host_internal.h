@@ -207,6 +207,7 @@ void sleep_ms(uint32_t ms);
 void *open_first(const char *const *names);
 void *lookup_gl(const char *symbol);
 void *lookup_egl(const char *symbol);
+void codboz_hide_virtual_stick_artwork(const char *name, uint8_t *data, size_t size);
 bool egl_backend_load_libraries(void);
 void *egl_backend_resolve(const char *symbol);
 void *egl_backend_get_proc_address(const char *symbol);

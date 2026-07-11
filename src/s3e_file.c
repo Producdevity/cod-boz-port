@@ -265,6 +265,7 @@ static FILE *open_dtrz_entry(const char *name, char *opened_path, size_t opened_
         return NULL;
     }
     fclose(archive);
+    codboz_hide_virtual_stick_artwork(entry->name, buffer, entry->size);
     FILE *file = fmemopen(buffer, alloc_size, "rb");
     if (!file) {
         free(buffer);
