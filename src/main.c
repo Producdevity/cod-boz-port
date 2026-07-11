@@ -1,23 +1,19 @@
 #include "s3e_host.h"
 #include "s3e_image.h"
 
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <signal.h>
-#include <string.h>
 #include <stdlib.h>
-#if defined(__linux__)
+#include <string.h>
 #include <ucontext.h>
-#endif
-#include <unistd.h>
 
 static uintptr_t g_loaded_base;
 static const char g_empty_string[8] __attribute__((aligned(8))) = "";
 static uint32_t g_bucket_allocator_table[33] __attribute__((aligned(8)));
 
 enum {
-    BUCKET_ALLOCATOR_OBJECT_OFFSET = 0x41d498u,
     BUCKET_ALLOCATOR_TABLE_SLOT = 0x4cu,
 };
 
@@ -110,7 +106,6 @@ static void usage(const char *argv0) {
 }
 
 static void crash_handler(int sig, siginfo_t *info, void *context) {
-#if defined(__linux__) && defined(__arm__)
     ucontext_t *uc = (ucontext_t *)context;
     if (sig == SIGSEGV && recover_bucket_allocator_fault(uc)) {
         return;
@@ -159,10 +154,6 @@ static void crash_handler(int sig, siginfo_t *info, void *context) {
         fprintf(stderr, " %08x", sp[i]);
     }
     fprintf(stderr, "\n");
-#else
-    (void)context;
-    fprintf(stderr, "signal %d addr=%p\n", sig, info ? info->si_addr : NULL);
-#endif
     _Exit(128 + sig);
 }
 

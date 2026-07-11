@@ -14,8 +14,6 @@ enum {
     SDL_BUTTON_Y = 3,
     SDL_BUTTON_BACK = 4,
     SDL_BUTTON_START = 6,
-    SDL_BUTTON_LEFTSTICK = 7,
-    SDL_BUTTON_RIGHTSTICK = 8,
     SDL_BUTTON_LEFTSHOULDER = 9,
     SDL_BUTTON_RIGHTSHOULDER = 10,
     SDL_BUTTON_DPAD_UP = 11,
@@ -213,8 +211,7 @@ static void input_open(void) {
             fprintf(stderr, "[input] SDL2 controller symbols unavailable\n");
         } else if (g_sdl.GetError) {
             const char *error = g_sdl.GetError();
-            fprintf(stderr, "[input] SDL_InitSubSystem failed: %s\n",
-                    error ? error : "unknown");
+            fprintf(stderr, "[input] SDL_InitSubSystem failed: %s\n", error ? error : "unknown");
         }
         return;
     }
@@ -237,9 +234,9 @@ static void input_open(void) {
     if (selected_index >= 0) {
         g_controller = g_sdl.GameControllerOpen(selected_index);
         if (g_controller) {
-            g_joystick =
-                g_sdl.GameControllerGetJoystick ? g_sdl.GameControllerGetJoystick(g_controller) :
-                                                  NULL;
+            g_joystick = g_sdl.GameControllerGetJoystick
+                             ? g_sdl.GameControllerGetJoystick(g_controller)
+                             : NULL;
         }
     }
 }
@@ -546,13 +543,11 @@ static void touchpad_release_all(void) {
 }
 
 static int32_t touchpad_x_from_axis(int32_t center, int32_t radius, int32_t axis) {
-    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767),
-                       XPERIA_TOUCHPAD_WIDTH);
+    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767), XPERIA_TOUCHPAD_WIDTH);
 }
 
 static int32_t touchpad_y_from_axis(int32_t center, int32_t radius, int32_t axis) {
-    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767),
-                       XPERIA_TOUCHPAD_HEIGHT);
+    return clamp_value(center + (int32_t)((int64_t)axis * radius / 32767), XPERIA_TOUCHPAD_HEIGHT);
 }
 
 static void touchpad_update_stick(uint32_t id, int32_t x_axis, int32_t y_axis, int32_t center_x,
@@ -629,8 +624,7 @@ static void input_update_game_keys(void) {
     game_action_apply(input_button(SDL_BUTTON_B), &KEYMAP_RELOAD);
     game_action_apply(input_button(SDL_BUTTON_X), &KEYMAP_MELEE);
     game_action_apply(input_button(SDL_BUTTON_Y), &KEYMAP_GRENADE);
-    game_action_apply(input_button(SDL_BUTTON_LEFTSHOULDER) ||
-                          input_trigger(SDL_AXIS_TRIGGERLEFT),
+    game_action_apply(input_button(SDL_BUTTON_LEFTSHOULDER) || input_trigger(SDL_AXIS_TRIGGERLEFT),
                       &KEYMAP_AIM);
     game_action_apply(input_button(SDL_BUTTON_RIGHTSHOULDER) ||
                           input_trigger(SDL_AXIS_TRIGGERRIGHT),

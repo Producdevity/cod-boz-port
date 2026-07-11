@@ -36,7 +36,7 @@
         if (real)                                                                                  \
             real(a, b, c, d, e, f);                                                                \
     }
-#define GL_WRAP_FLOAT1_ALIAS(name, fallback, t1)                                                    \
+#define GL_WRAP_FLOAT1_ALIAS(name, fallback, t1)                                                   \
     static S3E_SOFTFP void host_##name(t1 a) {                                                     \
         void (*real)(t1) = lookup_gl(#name);                                                       \
         if (!real)                                                                                 \
@@ -44,7 +44,7 @@
         if (real)                                                                                  \
             real(a);                                                                               \
     }
-#define GL_WRAP_FLOAT2_ALIAS(name, fallback, t1, t2)                                                \
+#define GL_WRAP_FLOAT2_ALIAS(name, fallback, t1, t2)                                               \
     static S3E_SOFTFP void host_##name(t1 a, t2 b) {                                               \
         void (*real)(t1, t2) = lookup_gl(#name);                                                   \
         if (!real)                                                                                 \
@@ -52,7 +52,7 @@
         if (real)                                                                                  \
             real(a, b);                                                                            \
     }
-#define GL_WRAP_FLOAT6_ALIAS(name, fallback, t1, t2, t3, t4, t5, t6)                                \
+#define GL_WRAP_FLOAT6_ALIAS(name, fallback, t1, t2, t3, t4, t5, t6)                               \
     static S3E_SOFTFP void host_##name(t1 a, t2 b, t3 c, t4 d, t5 e, t6 f) {                       \
         void (*real)(t1, t2, t3, t4, t5, t6) = lookup_gl(#name);                                   \
         if (!real)                                                                                 \
@@ -115,21 +115,20 @@ GL_WRAP_FLOAT5(glMultiTexCoord4f, GLenum, GLfloat, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT3(glNormal3f, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT6(glOrthof, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT6_ALIAS(glOrthofOES, glOrthof, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat)
-GL_WRAP_FLOAT2(glPointParameterf, GLenum, GLfloat)
 GL_WRAP_FLOAT1(glPointSize, GLfloat)
 GL_WRAP_FLOAT2(glPolygonOffset, GLfloat, GLfloat)
 GL_WRAP_FLOAT4(glRotatef, GLfloat, GLfloat, GLfloat, GLfloat)
-GL_WRAP_FLOAT2(glSampleCoverage, GLfloat, GLboolean)
 GL_WRAP_FLOAT3(glScalef, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT3(glTexEnvf, GLenum, GLenum, GLfloat)
 GL_WRAP_FLOAT3(glTexGenfOES, GLenum, GLenum, GLfloat)
-GL_WRAP_FLOAT3(glTexParameterf, GLenum, GLenum, GLfloat)
 GL_WRAP_FLOAT3(glTranslatef, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT2(glUniform1f, GLint, GLfloat)
-GL_WRAP_FLOAT3(glUniform2f, GLint, GLfloat, GLfloat)
-GL_WRAP_FLOAT4(glUniform3f, GLint, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT5(glUniform4f, GLint, GLfloat, GLfloat, GLfloat, GLfloat)
-GL_WRAP_FLOAT5(glVertexAttrib4f, GLuint, GLfloat, GLfloat, GLfloat, GLfloat)
+
+struct host_symbol {
+    const char *name;
+    void *fn;
+};
 
 static void *resolve_wrapped_host_proc(const char *symbol);
 
@@ -211,8 +210,8 @@ static void frontend_cursor_gl_present(void) {
                       outline_thickness, gl_scissor, gl_clear);
     cursor_clear_rect(x - outline_thickness / 2, y - outline_radius, outline_thickness,
                       outline_radius * 2 + 1, gl_scissor, gl_clear);
-    gl_clear_color(0.1f, 0.55f, 1.0f, 1.0f);  // inner color
-    cursor_clear_rect(x - inner_radius, y - inner_thickness/ 2, inner_radius * 2 + 1,
+    gl_clear_color(0.1f, 0.55f, 1.0f, 1.0f); // inner color
+    cursor_clear_rect(x - inner_radius, y - inner_thickness / 2, inner_radius * 2 + 1,
                       inner_thickness, gl_scissor, gl_clear);
     cursor_clear_rect(x - inner_thickness / 2, y - inner_radius, inner_thickness,
                       inner_radius * 2 + 1, gl_scissor, gl_clear);
@@ -232,11 +231,6 @@ static EGLBoolean host_eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
     pace_frame();
     return result;
 }
-
-struct host_symbol {
-    const char *name;
-    void *fn;
-};
 
 #define HOST(name) {#name, (void *)(uintptr_t)&name}
 
@@ -400,81 +394,28 @@ static const struct host_symbol HOST_SYMBOLS[] = {
     HOST(s3eExtGetHash),
 };
 
+#define WRAPPED(name) {#name, (void *)(uintptr_t)&host_##name}
+
+static const struct host_symbol WRAPPED_SYMBOLS[] = {
+    WRAPPED(glAlphaFunc),     WRAPPED(glBlendColor),      WRAPPED(glClearColor),
+    WRAPPED(glClearDepthf),   WRAPPED(glClearDepthfOES),  WRAPPED(glColor4f),
+    WRAPPED(glDepthRangef),   WRAPPED(glDepthRangefOES),  WRAPPED(glDrawTexfOES),
+    WRAPPED(glFogf),          WRAPPED(glFrustumf),        WRAPPED(glFrustumfOES),
+    WRAPPED(glLightModelf),   WRAPPED(glLightf),          WRAPPED(glLineWidth),
+    WRAPPED(glMaterialf),     WRAPPED(glMultiTexCoord4f), WRAPPED(glNormal3f),
+    WRAPPED(glOrthof),        WRAPPED(glOrthofOES),       WRAPPED(glPointSize),
+    WRAPPED(glPolygonOffset), WRAPPED(glRotatef),         WRAPPED(glScalef),
+    WRAPPED(glTexEnvf),       WRAPPED(glTexGenfOES),      WRAPPED(glTranslatef),
+    WRAPPED(glUniform1f),     WRAPPED(glUniform4f),       WRAPPED(eglGetProcAddress),
+    WRAPPED(eglSwapBuffers),
+};
+
 static void *resolve_wrapped_host_proc(const char *symbol) {
-    if (strcmp(symbol, "glAlphaFunc") == 0)
-        return host_glAlphaFunc;
-    if (strcmp(symbol, "glBlendColor") == 0)
-        return host_glBlendColor;
-    if (strcmp(symbol, "glClearColor") == 0)
-        return host_glClearColor;
-    if (strcmp(symbol, "glClearDepthf") == 0)
-        return host_glClearDepthf;
-    if (strcmp(symbol, "glClearDepthfOES") == 0)
-        return host_glClearDepthfOES;
-    if (strcmp(symbol, "glColor4f") == 0)
-        return host_glColor4f;
-    if (strcmp(symbol, "glDepthRangef") == 0)
-        return host_glDepthRangef;
-    if (strcmp(symbol, "glDepthRangefOES") == 0)
-        return host_glDepthRangefOES;
-    if (strcmp(symbol, "glDrawTexfOES") == 0)
-        return host_glDrawTexfOES;
-    if (strcmp(symbol, "glFogf") == 0)
-        return host_glFogf;
-    if (strcmp(symbol, "glFrustumf") == 0)
-        return host_glFrustumf;
-    if (strcmp(symbol, "glFrustumfOES") == 0)
-        return host_glFrustumfOES;
-    if (strcmp(symbol, "glLightf") == 0)
-        return host_glLightf;
-    if (strcmp(symbol, "glLightModelf") == 0)
-        return host_glLightModelf;
-    if (strcmp(symbol, "glLineWidth") == 0)
-        return host_glLineWidth;
-    if (strcmp(symbol, "glMaterialf") == 0)
-        return host_glMaterialf;
-    if (strcmp(symbol, "glMultiTexCoord4f") == 0)
-        return host_glMultiTexCoord4f;
-    if (strcmp(symbol, "glNormal3f") == 0)
-        return host_glNormal3f;
-    if (strcmp(symbol, "glOrthof") == 0)
-        return host_glOrthof;
-    if (strcmp(symbol, "glOrthofOES") == 0)
-        return host_glOrthofOES;
-    if (strcmp(symbol, "glPointParameterf") == 0)
-        return host_glPointParameterf;
-    if (strcmp(symbol, "glPointSize") == 0)
-        return host_glPointSize;
-    if (strcmp(symbol, "glPolygonOffset") == 0)
-        return host_glPolygonOffset;
-    if (strcmp(symbol, "glRotatef") == 0)
-        return host_glRotatef;
-    if (strcmp(symbol, "glSampleCoverage") == 0)
-        return host_glSampleCoverage;
-    if (strcmp(symbol, "glScalef") == 0)
-        return host_glScalef;
-    if (strcmp(symbol, "glTexEnvf") == 0)
-        return host_glTexEnvf;
-    if (strcmp(symbol, "glTexGenfOES") == 0)
-        return host_glTexGenfOES;
-    if (strcmp(symbol, "glTexParameterf") == 0)
-        return host_glTexParameterf;
-    if (strcmp(symbol, "glTranslatef") == 0)
-        return host_glTranslatef;
-    if (strcmp(symbol, "glUniform1f") == 0)
-        return host_glUniform1f;
-    if (strcmp(symbol, "glUniform2f") == 0)
-        return host_glUniform2f;
-    if (strcmp(symbol, "glUniform3f") == 0)
-        return host_glUniform3f;
-    if (strcmp(symbol, "glUniform4f") == 0)
-        return host_glUniform4f;
-    if (strcmp(symbol, "glVertexAttrib4f") == 0)
-        return host_glVertexAttrib4f;
-    if (strcmp(symbol, "eglGetProcAddress") == 0)
-        return host_eglGetProcAddress;
-    if (strcmp(symbol, "eglSwapBuffers") == 0)
-        return host_eglSwapBuffers;
+    for (size_t i = 0; i < sizeof(WRAPPED_SYMBOLS) / sizeof(WRAPPED_SYMBOLS[0]); ++i) {
+        if (strcmp(symbol, WRAPPED_SYMBOLS[i].name) == 0) {
+            return WRAPPED_SYMBOLS[i].fn;
+        }
+    }
     return NULL;
 }
 

@@ -656,77 +656,13 @@ void *s3eGLGetNativeWindow(void) {
     return &g_native_window;
 }
 
-uintptr_t s3eThreadGetCurrent(void) {
-    static struct s3e_host_thread main_thread;
-    if (!main_thread.magic) {
-        main_thread.magic = 0x54485244u;
-        main_thread.id = pthread_self();
-    }
-    return 4000;
-}
-
-void *s3eMutexCreate(void) {
-    struct s3e_host_mutex *mutex = calloc(1, sizeof(*mutex));
-    if (!mutex) {
-        return NULL;
-    }
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    int rc = pthread_mutex_init(&mutex->mutex, &attr);
-    pthread_mutexattr_destroy(&attr);
-    if (rc != 0) {
-        free(mutex);
-        return NULL;
-    }
-    mutex->magic = S3E_HOST_MUTEX_MAGIC;
-    return mutex;
-}
-
-int32_t s3eMutexDestroy(void *handle) {
-    struct s3e_host_mutex *mutex = handle;
-    if (!mutex || mutex->magic != S3E_HOST_MUTEX_MAGIC) {
-        return 1;
-    }
-    mutex->magic = 0;
-    pthread_mutex_destroy(&mutex->mutex);
-    free(mutex);
-    return 0;
-}
-
-int32_t s3eMutexAcquire(void *handle, int32_t timeout_ms) {
-    struct s3e_host_mutex *mutex = handle;
-    if (!mutex || mutex->magic != S3E_HOST_MUTEX_MAGIC) {
-        return 1;
-    }
-    if (timeout_ms == 0) {
-        return pthread_mutex_trylock(&mutex->mutex) == 0 ? 0 : 1;
-    }
-    return pthread_mutex_lock(&mutex->mutex) == 0 ? 0 : 1;
-}
-
-int32_t s3eMutexRelease(void *handle) {
-    struct s3e_host_mutex *mutex = handle;
-    if (!mutex || mutex->magic != S3E_HOST_MUTEX_MAGIC) {
-        return 1;
-    }
-    return pthread_mutex_unlock(&mutex->mutex) == 0 ? 0 : 1;
-}
-
 uintptr_t s3eReturn0(void) {
     return 0;
-}
-int32_t s3eReturnMinus1(void) {
-    return -1;
 }
 uintptr_t s3eStub(void) {
     return 0;
 }
 
-int32_t s3eTouchpadInit(void) {
-    return 1;
-}
-void s3eTouchpadTerminate(void) {}
 int32_t s3eTouchpadGetInt(uint32_t key) {
     switch (key) {
     case 0:
