@@ -16,8 +16,6 @@ fi
 source "$controlfolder/control.txt"
 export PORT_32BIT="Y"
 # shellcheck source=/dev/null
-source "$controlfolder/device_info.txt"
-# shellcheck source=/dev/null
 [ -f "$controlfolder/tasksetter" ] && source "$controlfolder/tasksetter"
 # shellcheck source=/dev/null
 [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
@@ -31,52 +29,30 @@ apkdir="$gamedir/apk"
 loader="$gamedir/codboz_s3e_loader"
 setup_script="$gamedir/codboz_setup"
 s3e="$assetdir/boz.s3e.unpacked"
-installed="$gamedir/.installed"
 savehome="$gamedir/savedata-home"
 
 mkdir -p "$savehome" "$apkdir" "$assetdir"
 cd "$gamedir" || exit 1
-> "$gamedir/log.txt" && exec > >(tee "$gamedir/log.txt") 2>&1
-
-finish_port() {
-  if command -v pm_finish >/dev/null 2>&1; then
-    pm_finish
-  fi
-}
-
-end_splash() {
-  if command -v pm_end_splash >/dev/null 2>&1; then
-    pm_end_splash
-  fi
-}
-
-message() {
-  echo "$1"
-  if command -v pm_message >/dev/null 2>&1; then
-    pm_message "$1"
-  fi
-}
+: > "$gamedir/log.txt" && exec > >(tee "$gamedir/log.txt") 2>&1
 
 show_error() {
   echo "ERROR: $1 - $2"
-  end_splash
   if command -v pm_show_error >/dev/null 2>&1; then
-    pm_show_error "$1" "$2"
+    pm_show_error "$1: $2"
   else
-    message "$1: $2"
+    pm_message "$1: $2"
     sleep 8
   fi
 }
 
 has_game_data() {
-  [ -f "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
+  [ -s "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
 }
 
 # shellcheck disable=SC2329
 on_signal() {
   [ -n "${game_pid:-}" ] && kill -TERM "$game_pid" 2>/dev/null || true
-  end_splash
-  finish_port
+  pm_finish
   exit 130
 }
 trap on_signal INT TERM HUP
@@ -118,12 +94,7 @@ if ! has_game_data; then
   exit 1
 fi
 
-if has_game_data && [ ! -f "$installed" ]; then
-  touch "$installed"
-fi
-
 require_file "$s3e" "Missing Game Data" "Setup did not create assets/boz.s3e.unpacked."
-end_splash
 
 export HOME="$savehome"
 
@@ -132,9 +103,6 @@ if [ "${CFW_NAME:-}" = "knulli" ] && [ -S /var/run/pipewire-0 ]; then
   export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-/var/run}"
 fi
 
-[ -z "${SPA_PLUGIN_DIR:-}" ] && [ -d /usr/lib32/spa-0.2 ] && export SPA_PLUGIN_DIR=/usr/lib32/spa-0.2
-[ -z "${PIPEWIRE_MODULE_DIR:-}" ] && [ -d /usr/lib32/pipewire-0.3 ] && export PIPEWIRE_MODULE_DIR=/usr/lib32/pipewire-0.3
-[ -z "${ALSA_CONFIG:-}" ] && [ -f /usr/share/alsa/alsa.conf ] && export ALSA_CONFIG=/usr/share/alsa/alsa.conf
 export LD_LIBRARY_PATH="$gamedir/libs.armhf:${LD_LIBRARY_PATH:-}"
 if [ -n "${sdl_controllerconfig:-}" ]; then
   export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
@@ -151,5 +119,5 @@ ${TASKSET:-} "$loader" --root "$gamedir" --run "$s3e" &
 game_pid=$!
 wait "$game_pid"
 status=$?
-finish_port
+pm_finish
 exit "$status"

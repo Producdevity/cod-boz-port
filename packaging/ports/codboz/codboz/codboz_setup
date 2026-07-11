@@ -26,7 +26,6 @@ apkdir="$gamedir/apk"
 extractor="$gamedir/codboz_apk_extract"
 apk="$apkdir/game.apk"
 s3e="$assetdir/boz.s3e.unpacked"
-installed="$gamedir/.installed"
 setup_log="$gamedir/setup.log"
 extract_log="$gamedir/extract.log"
 expected_apk_sha256="359ee68b6e0a3a66e921ec9b955b290dedb93135fd3c20904bc1bb6f47b5499d"
@@ -100,7 +99,7 @@ verify_apk() {
 }
 
 has_game_data() {
-  [ -f "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
+  [ -s "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
 }
 
 archive_sha256() {
@@ -273,12 +272,11 @@ if has_game_data; then
   status "Verifying existing game data..."
   if verify_archive blackops_etc.dz "$assetdir/blackops_etc.dz" &&
     verify_archive blackops_gles1.dz "$assetdir/blackops_gles1.dz"; then
-    touch "$installed" || fail "Could not mark setup complete."
     status "Game data already exists. OK"
     exit 0
   fi
   status "Existing resource checksum failed. Redownloading."
-  rm -f "$assetdir/blackops_etc.dz" "$assetdir/blackops_gles1.dz" "$installed"
+  rm -f "$assetdir/blackops_etc.dz" "$assetdir/blackops_gles1.dz"
 fi
 
 verify_apk
@@ -310,5 +308,4 @@ if ! has_game_data; then
   fail "Setup finished but required game data is still missing."
 fi
 
-touch "$installed" || fail "Could not mark setup complete."
 status "Setup complete."
