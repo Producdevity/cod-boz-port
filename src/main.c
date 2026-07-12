@@ -102,7 +102,27 @@ static bool recover_null_buffer_slot(ucontext_t *uc) {
 }
 
 static void usage(const char *argv0) {
-    fprintf(stderr, "usage: %s [--run] [--root DIR] IMAGE.s3e.unpacked\n", argv0);
+    fprintf(stderr,
+            "usage: %s [--run] [--root DIR] [--display-size WIDTHxHEIGHT] "
+            "IMAGE.s3e.unpacked\n",
+            argv0);
+}
+
+static bool parse_display_size(const char *value, uint32_t *width, uint32_t *height) {
+    char *width_end = NULL;
+    char *height_end = NULL;
+    unsigned long parsed_width = strtoul(value, &width_end, 10);
+    if (width_end == value || (*width_end != 'x' && *width_end != 'X')) {
+        return false;
+    }
+    unsigned long parsed_height = strtoul(width_end + 1, &height_end, 10);
+    if (height_end == width_end + 1 || *height_end != '\0' || !parsed_width || !parsed_height ||
+        parsed_width > UINT16_MAX || parsed_height > UINT16_MAX) {
+        return false;
+    }
+    *width = (uint32_t)parsed_width;
+    *height = (uint32_t)parsed_height;
+    return true;
 }
 
 static void crash_handler(int sig, siginfo_t *info, void *context) {
@@ -188,12 +208,30 @@ int main(int argc, char **argv) {
     bool run = false;
     const char *root = NULL;
     const char *image_path = NULL;
+    uint32_t display_width = 640;
+    uint32_t display_height = 480;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--run") == 0) {
             run = true;
-        } else if (strcmp(argv[i], "--root") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--root") == 0) {
+            if (i + 1 >= argc) {
+                usage(argv[0]);
+                return 2;
+            }
             root = argv[++i];
+        } else if (strcmp(argv[i], "--display-size") == 0) {
+            if (i + 1 >= argc) {
+                usage(argv[0]);
+                return 2;
+            }
+            if (!parse_display_size(argv[++i], &display_width, &display_height)) {
+                fprintf(stderr, "invalid display size: %s\n", argv[i]);
+                return 2;
+            }
+        } else if (argv[i][0] == '-') {
+            usage(argv[0]);
+            return 2;
         } else if (!image_path) {
             image_path = argv[i];
         } else {
@@ -205,6 +243,12 @@ int main(int argc, char **argv) {
     if (!image_path) {
         usage(argv[0]);
         return 2;
+    }
+
+    if (!s3e_host_set_display_size(display_width, display_height)) {
+        fprintf(stderr, "unable to allocate display surface: %ux%u\n", display_width,
+                display_height);
+        return 1;
     }
 
     install_crash_handlers();

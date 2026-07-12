@@ -105,6 +105,13 @@ struct fbdev_window {
     uint16_t height;
 };
 
+struct surface_geometry {
+    uint16_t x;
+    uint16_t y;
+    uint16_t width;
+    uint16_t height;
+};
+
 struct callback_slot {
     void *callback;
     void *user_data;
@@ -189,7 +196,8 @@ extern int g_user_mem_mgr_set;
 extern __thread int g_in_user_mem_mgr;
 extern struct s3e_heap g_heaps[8];
 extern struct fbdev_window g_native_window;
-extern uint32_t g_surface_pixels[640 * 480];
+extern struct surface_geometry g_surface;
+extern uint32_t *g_surface_pixels;
 extern struct callback_slot g_pointer_callbacks[4];
 extern struct callback_slot g_touchpad_callbacks[8];
 extern struct keyboard_callback_slot g_keyboard_callbacks[16];

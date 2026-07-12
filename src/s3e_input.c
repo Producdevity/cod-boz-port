@@ -306,11 +306,11 @@ static int32_t input_xperia_axis(int axis) {
 }
 
 static int32_t window_width(void) {
-    return g_native_window.width > 0 ? (int32_t)g_native_window.width : 640;
+    return g_surface.width > 0 ? (int32_t)g_surface.width : 640;
 }
 
 static int32_t window_height(void) {
-    return g_native_window.height > 0 ? (int32_t)g_native_window.height : 480;
+    return g_surface.height > 0 ? (int32_t)g_surface.height : 480;
 }
 
 static int32_t clamp_value(int32_t value, int32_t upper_exclusive) {
@@ -607,11 +607,12 @@ static void input_update_cursor(uint64_t dt) {
 
     int32_t old_x = g_pointer_x;
     int32_t old_y = g_pointer_y;
-    const int32_t speed = 900;
-    g_pointer_x = clamp_pointer_x(g_pointer_x +
-                                  (int32_t)((int64_t)x_axis * (int64_t)dt * speed / 32767 / 1000));
-    g_pointer_y = clamp_pointer_y(g_pointer_y +
-                                  (int32_t)((int64_t)y_axis * (int64_t)dt * speed / 32767 / 1000));
+    const int32_t x_speed = (int32_t)((int64_t)900 * window_width() / 640);
+    const int32_t y_speed = (int32_t)((int64_t)900 * window_height() / 480);
+    g_pointer_x = clamp_pointer_x(
+        g_pointer_x + (int32_t)((int64_t)x_axis * (int64_t)dt * x_speed / 32767 / 1000));
+    g_pointer_y = clamp_pointer_y(
+        g_pointer_y + (int32_t)((int64_t)y_axis * (int64_t)dt * y_speed / 32767 / 1000));
     if (g_pointer_x != old_x || g_pointer_y != old_y) {
         pointer_dispatch_motion();
     }

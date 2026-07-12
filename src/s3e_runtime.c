@@ -606,11 +606,11 @@ int32_t s3eSurfaceUnRegister(uint32_t id, void *callback) {
 int32_t s3eSurfaceGetInt(uint32_t key) {
     switch (key) {
     case 0:
-        return g_native_window.width;
+        return g_surface.width;
     case 1:
-        return g_native_window.height;
+        return g_surface.height;
     case 2:
-        return (int32_t)(g_native_window.width * sizeof(uint32_t));
+        return (int32_t)(g_surface.width * sizeof(uint32_t));
     case 3:
         return 4;
     default:
@@ -642,9 +642,9 @@ int32_t s3eGLUnRegister(uint32_t id, void *callback) {
 int32_t s3eGLGetInt(uint32_t key) {
     switch (key) {
     case 0:
-        return g_native_window.width;
+        return g_surface.width;
     case 1:
-        return g_native_window.height;
+        return g_surface.height;
     case 2:
         return 2;
     default:

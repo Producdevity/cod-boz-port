@@ -115,7 +115,10 @@ if command -v pm_platform_helper >/dev/null 2>&1; then
   pm_platform_helper "$loader"
 fi
 
-${TASKSET:-} "$loader" --root "$gamedir" --run "$s3e" &
+${TASKSET:-} "$loader" \
+  --root "$gamedir" \
+  --display-size "${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}" \
+  --run "$s3e" &
 game_pid=$!
 wait "$game_pid"
 status=$?

@@ -19,7 +19,8 @@ int g_user_mem_mgr_set;
 __thread int g_in_user_mem_mgr;
 struct s3e_heap g_heaps[8];
 struct fbdev_window g_native_window = {640, 480};
-uint32_t g_surface_pixels[640 * 480];
+struct surface_geometry g_surface = {0, 0, 640, 480};
+uint32_t *g_surface_pixels;
 struct callback_slot g_pointer_callbacks[4];
 struct callback_slot g_touchpad_callbacks[8];
 struct keyboard_callback_slot g_keyboard_callbacks[16];
@@ -81,6 +82,44 @@ void *lookup_egl(const char *symbol) {
     return g_egl ? dlsym(g_egl, symbol) : NULL;
 }
 
+bool s3e_host_set_display_size(uint32_t width, uint32_t height) {
+    if (!width || !height || width > UINT16_MAX || height > UINT16_MAX) {
+        return false;
+    }
+
+    uint32_t surface_width = width;
+    uint32_t surface_height = height;
+    uint32_t minimum_height = (width * 3u + 2u) / 4u;
+    uint32_t maximum_width = (height * 16u + 4u) / 9u;
+    if (height > minimum_height) {
+        surface_height = minimum_height;
+    } else if (width > maximum_width + 1u) {
+        surface_width = maximum_width;
+    }
+
+    if (surface_width > SIZE_MAX / surface_height ||
+        surface_width * surface_height > SIZE_MAX / sizeof(*g_surface_pixels)) {
+        return false;
+    }
+
+    uint32_t *pixels = calloc((size_t)surface_width * surface_height, sizeof(*pixels));
+    if (!pixels) {
+        return false;
+    }
+
+    free(g_surface_pixels);
+    g_surface_pixels = pixels;
+    g_native_window.width = (uint16_t)width;
+    g_native_window.height = (uint16_t)height;
+    g_surface.x = (uint16_t)((width - surface_width) / 2u);
+    g_surface.y = (uint16_t)((height - surface_height) / 2u);
+    g_surface.width = (uint16_t)surface_width;
+    g_surface.height = (uint16_t)surface_height;
+    g_pointer_x = (int32_t)((uint64_t)surface_width * 110u / 640u);
+    g_pointer_y = (int32_t)((uint64_t)surface_height * 150u / 480u);
+    return true;
+}
+
 bool s3e_host_init(const char *root) {
     g_host_start_us = monotonic_us();
     if (root && root[0]) {
@@ -88,6 +127,15 @@ bool s3e_host_init(const char *root) {
     } else if (!getcwd(g_root, sizeof(g_root))) {
         snprintf(g_root, sizeof(g_root), ".");
     }
+    if (!g_surface_pixels &&
+        !s3e_host_set_display_size(g_native_window.width, g_native_window.height)) {
+        fprintf(stderr, "failed to allocate %ux%u S3E surface\n", g_native_window.width,
+                g_native_window.height);
+        return false;
+    }
+    fprintf(stderr, "[display] drawable=%ux%u surface=%ux%u offset=%u,%u pitch=%zu\n",
+            g_native_window.width, g_native_window.height, g_surface.width, g_surface.height,
+            g_surface.x, g_surface.y, (size_t)g_surface.width * sizeof(*g_surface_pixels));
     return egl_backend_load_libraries();
 }
 
@@ -119,6 +167,8 @@ void s3e_host_shutdown(void) {
     egl_backend_shutdown();
     clear_timers();
     close_all_memory_files();
+    free(g_surface_pixels);
+    g_surface_pixels = NULL;
     for (size_t i = 0; i < sizeof(g_heaps) / sizeof(g_heaps[0]); ++i) {
         free(g_heaps[i].base);
         g_heaps[i].base = NULL;

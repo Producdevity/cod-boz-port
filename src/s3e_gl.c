@@ -64,7 +64,24 @@
 enum {
     FRAME_INTERVAL_US = 16667,
     FRAME_RESET_US = FRAME_INTERVAL_US * 4,
+    REFERENCE_SURFACE_WIDTH = 640,
+    REFERENCE_SURFACE_HEIGHT = 480,
+    GL_VIEWPORT_VALUE = 0x0ba2,
+    GL_COLOR_WRITEMASK_VALUE = 0x0c23,
+    GL_FRAMEBUFFER_VALUE = 0x8d40,
 };
+
+static GLuint g_bound_framebuffer;
+
+static void driver_bind_framebuffer(GLuint framebuffer) {
+    void (*real)(GLenum, GLuint) = lookup_gl("glBindFramebuffer");
+    if (!real) {
+        real = lookup_gl("glBindFramebufferOES");
+    }
+    if (real) {
+        real(GL_FRAMEBUFFER_VALUE, framebuffer);
+    }
+}
 
 static void sleep_until_us(uint64_t target_us) {
     for (;;) {
@@ -125,6 +142,130 @@ GL_WRAP_FLOAT3(glTranslatef, GLfloat, GLfloat, GLfloat)
 GL_WRAP_FLOAT2(glUniform1f, GLint, GLfloat)
 GL_WRAP_FLOAT5(glUniform4f, GLint, GLfloat, GLfloat, GLfloat, GLfloat)
 
+static void bind_framebuffer(GLenum target, GLuint framebuffer) {
+    if (target == GL_FRAMEBUFFER_VALUE) {
+        driver_bind_framebuffer(framebuffer);
+        g_bound_framebuffer = framebuffer;
+        return;
+    }
+
+    void (*real)(GLenum, GLuint) = lookup_gl("glBindFramebuffer");
+    if (!real) {
+        real = lookup_gl("glBindFramebufferOES");
+    }
+    if (real) {
+        real(target, framebuffer);
+    }
+}
+
+static S3E_SOFTFP void host_glBindFramebuffer(GLenum target, GLuint framebuffer) {
+    bind_framebuffer(target, framebuffer);
+}
+
+static S3E_SOFTFP void host_glBindFramebufferOES(GLenum target, GLuint framebuffer) {
+    bind_framebuffer(target, framebuffer);
+}
+
+static S3E_SOFTFP void host_glViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
+    void (*real)(GLint, GLint, GLsizei, GLsizei) = lookup_gl("glViewport");
+    if (real) {
+        if (!g_bound_framebuffer) {
+            x += g_surface.x;
+            y += g_surface.y;
+        }
+        real(x, y, width, height);
+    }
+}
+
+static S3E_SOFTFP void host_glScissor(GLint x, GLint y, GLsizei width, GLsizei height) {
+    void (*real)(GLint, GLint, GLsizei, GLsizei) = lookup_gl("glScissor");
+    if (real) {
+        if (!g_bound_framebuffer) {
+            x += g_surface.x;
+            y += g_surface.y;
+        }
+        real(x, y, width, height);
+    }
+}
+
+static void map_drawable_rect_to_surface(GLint *rect) {
+    GLint left = rect[0] > g_surface.x ? rect[0] : g_surface.x;
+    GLint bottom = rect[1] > g_surface.y ? rect[1] : g_surface.y;
+    GLint right = rect[0] + rect[2];
+    GLint top = rect[1] + rect[3];
+    GLint surface_right = g_surface.x + g_surface.width;
+    GLint surface_top = g_surface.y + g_surface.height;
+    if (right > surface_right) {
+        right = surface_right;
+    }
+    if (top > surface_top) {
+        top = surface_top;
+    }
+    if (left > surface_right) {
+        left = surface_right;
+    }
+    if (bottom > surface_top) {
+        bottom = surface_top;
+    }
+    rect[0] = left - g_surface.x;
+    rect[1] = bottom - g_surface.y;
+    rect[2] = right > left ? right - left : 0;
+    rect[3] = top > bottom ? top - bottom : 0;
+}
+
+static S3E_SOFTFP void host_glGetIntegerv(GLenum name, GLint *values) {
+    void (*real)(GLenum, GLint *) = lookup_gl("glGetIntegerv");
+    if (!real) {
+        return;
+    }
+    real(name, values);
+    if (!g_bound_framebuffer && values &&
+        (name == GL_VIEWPORT_VALUE || name == GL_SCISSOR_BOX_VALUE)) {
+        map_drawable_rect_to_surface(values);
+    }
+}
+
+static S3E_SOFTFP void host_glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
+                                         GLenum format, GLenum type, void *pixels) {
+    void (*real)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *) =
+        lookup_gl("glReadPixels");
+    if (real) {
+        if (!g_bound_framebuffer) {
+            x += g_surface.x;
+            y += g_surface.y;
+        }
+        real(x, y, width, height, format, type, pixels);
+    }
+}
+
+static S3E_SOFTFP void host_glCopyTexImage2D(GLenum target, GLint level, GLenum internal_format,
+                                             GLint x, GLint y, GLsizei width, GLsizei height,
+                                             GLint border) {
+    void (*real)(GLenum, GLint, GLenum, GLint, GLint, GLsizei, GLsizei, GLint) =
+        lookup_gl("glCopyTexImage2D");
+    if (real) {
+        if (!g_bound_framebuffer) {
+            x += g_surface.x;
+            y += g_surface.y;
+        }
+        real(target, level, internal_format, x, y, width, height, border);
+    }
+}
+
+static S3E_SOFTFP void host_glCopyTexSubImage2D(GLenum target, GLint level, GLint x_offset,
+                                                GLint y_offset, GLint x, GLint y, GLsizei width,
+                                                GLsizei height) {
+    void (*real)(GLenum, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei) =
+        lookup_gl("glCopyTexSubImage2D");
+    if (real) {
+        if (!g_bound_framebuffer) {
+            x += g_surface.x;
+            y += g_surface.y;
+        }
+        real(target, level, x_offset, y_offset, x, y, width, height);
+    }
+}
+
 struct host_symbol {
     const char *name;
     void *fn;
@@ -158,24 +299,44 @@ static void cursor_clear_rect(GLint x, GLint y, GLsizei w, GLsizei h,
         h += y;
         y = 0;
     }
-    if (x + w > g_native_window.width) {
-        w = g_native_window.width - x;
+    if (x + w > g_surface.width) {
+        w = g_surface.width - x;
     }
-    if (y + h > g_native_window.height) {
-        h = g_native_window.height - y;
+    if (y + h > g_surface.height) {
+        h = g_surface.height - y;
     }
     if (w <= 0 || h <= 0) {
         return;
     }
-    GLint gl_y = (GLint)g_native_window.height - y - h;
-    gl_scissor(x, gl_y, w, h);
+    GLint gl_y = (GLint)g_surface.height - y - h;
+    gl_scissor(g_surface.x + x, g_surface.y + gl_y, w, h);
     gl_clear(GL_COLOR_BUFFER_BIT_VALUE);
 }
 
-static void frontend_cursor_gl_present(void) {
-    if (!g_cursor_active) {
+static int cursor_scaled_size(int size) {
+    uint32_t width_scale = (uint32_t)g_surface.width * REFERENCE_SURFACE_HEIGHT;
+    uint32_t height_scale = (uint32_t)g_surface.height * REFERENCE_SURFACE_WIDTH;
+    uint32_t scale = width_scale < height_scale ? width_scale : height_scale;
+    uint32_t reference_area = REFERENCE_SURFACE_WIDTH * REFERENCE_SURFACE_HEIGHT;
+    int result = (int)(((uint64_t)size * scale + reference_area / 2u) / reference_area);
+    return result > 0 ? result : 1;
+}
+
+static void clear_letterbox_rect(GLint x, GLint y, GLsizei width, GLsizei height,
+                                 void (*gl_scissor)(GLint, GLint, GLsizei, GLsizei),
+                                 void (*gl_clear)(GLbitfield)) {
+    if (width > 0 && height > 0) {
+        gl_scissor(x, y, width, height);
+        gl_clear(GL_COLOR_BUFFER_BIT_VALUE);
+    }
+}
+
+static void frontend_overlay_gl_present(void) {
+    int has_letterbox = g_surface.x || g_surface.y;
+    if (!has_letterbox && !g_cursor_active) {
         return;
     }
+
     void (*gl_disable)(GLenum) = lookup_gl("glDisable");
     void (*gl_enable)(GLenum) = lookup_gl("glEnable");
     GLboolean (*gl_is_enabled)(GLenum) = lookup_gl("glIsEnabled");
@@ -184,37 +345,60 @@ static void frontend_cursor_gl_present(void) {
     void (*gl_clear)(GLbitfield) = lookup_gl("glClear");
     void (*gl_get_integerv)(GLenum, GLint *) = lookup_gl("glGetIntegerv");
     void (*gl_get_floatv)(GLenum, GLfloat *) = lookup_gl("glGetFloatv");
+    void (*gl_get_booleanv)(GLenum, GLboolean *) = lookup_gl("glGetBooleanv");
+    void (*gl_color_mask)(GLboolean, GLboolean, GLboolean, GLboolean) = lookup_gl("glColorMask");
     if (!gl_disable || !gl_enable || !gl_is_enabled || !gl_scissor || !gl_clear_color ||
-        !gl_clear || !gl_get_integerv || !gl_get_floatv) {
+        !gl_clear || !gl_get_integerv || !gl_get_floatv || !gl_get_booleanv || !gl_color_mask) {
         return;
     }
+
     GLboolean scissor_was_enabled = gl_is_enabled(GL_SCISSOR_TEST_VALUE);
     GLint scissor_box[4] = {0, 0, 0, 0};
     GLfloat clear_color[4] = {0, 0, 0, 0};
+    GLboolean color_mask[4] = {1, 1, 1, 1};
     gl_get_integerv(GL_SCISSOR_BOX_VALUE, scissor_box);
     gl_get_floatv(GL_COLOR_CLEAR_VALUE, clear_color);
+    gl_get_booleanv(GL_COLOR_WRITEMASK_VALUE, color_mask);
+
     if (!scissor_was_enabled) {
         gl_enable(GL_SCISSOR_TEST_VALUE);
     }
-    int x = g_pointer_x;
-    int y = g_pointer_y;
+    gl_color_mask(1, 1, 1, 1);
+    gl_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
 
-    const int outline_radius = 10;
-    const int outline_thickness = 5;
-    const int inner_radius = 8;
-    const int inner_thickness = 3;
+    if (has_letterbox) {
+        GLint right = g_surface.x + g_surface.width;
+        GLint top = g_surface.y + g_surface.height;
+        clear_letterbox_rect(0, 0, g_surface.x, g_native_window.height, gl_scissor, gl_clear);
+        clear_letterbox_rect(right, 0, g_native_window.width - right, g_native_window.height,
+                             gl_scissor, gl_clear);
+        clear_letterbox_rect(g_surface.x, 0, g_surface.width, g_surface.y, gl_scissor, gl_clear);
+        clear_letterbox_rect(g_surface.x, top, g_surface.width, g_native_window.height - top,
+                             gl_scissor, gl_clear);
+    }
 
-    gl_clear_color(0.0f, 0.0f, 0.0f, 1.0f); // outline
-    cursor_clear_rect(x - outline_radius, y - outline_thickness / 2, outline_radius * 2 + 1,
-                      outline_thickness, gl_scissor, gl_clear);
-    cursor_clear_rect(x - outline_thickness / 2, y - outline_radius, outline_thickness,
-                      outline_radius * 2 + 1, gl_scissor, gl_clear);
-    gl_clear_color(0.1f, 0.55f, 1.0f, 1.0f); // inner color
-    cursor_clear_rect(x - inner_radius, y - inner_thickness / 2, inner_radius * 2 + 1,
-                      inner_thickness, gl_scissor, gl_clear);
-    cursor_clear_rect(x - inner_thickness / 2, y - inner_radius, inner_thickness,
-                      inner_radius * 2 + 1, gl_scissor, gl_clear);
+    if (g_cursor_active) {
+        int x = g_pointer_x;
+        int y = g_pointer_y;
+        const int outline_radius = cursor_scaled_size(10);
+        const int outline_thickness = cursor_scaled_size(5);
+        const int inner_radius = cursor_scaled_size(8);
+        const int inner_thickness = cursor_scaled_size(3);
+
+        gl_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
+        cursor_clear_rect(x - outline_radius, y - outline_thickness / 2, outline_radius * 2 + 1,
+                          outline_thickness, gl_scissor, gl_clear);
+        cursor_clear_rect(x - outline_thickness / 2, y - outline_radius, outline_thickness,
+                          outline_radius * 2 + 1, gl_scissor, gl_clear);
+        gl_clear_color(0.1f, 0.55f, 1.0f, 1.0f);
+        cursor_clear_rect(x - inner_radius, y - inner_thickness / 2, inner_radius * 2 + 1,
+                          inner_thickness, gl_scissor, gl_clear);
+        cursor_clear_rect(x - inner_thickness / 2, y - inner_radius, inner_thickness,
+                          inner_radius * 2 + 1, gl_scissor, gl_clear);
+    }
+
     gl_clear_color(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
+    gl_color_mask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
     gl_scissor(scissor_box[0], scissor_box[1], scissor_box[2], scissor_box[3]);
     if (!scissor_was_enabled) {
         gl_disable(GL_SCISSOR_TEST_VALUE);
@@ -224,7 +408,14 @@ static void frontend_cursor_gl_present(void) {
 static EGLBoolean host_eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
     input_pump();
     dispatch_due_timers();
-    frontend_cursor_gl_present();
+    GLuint previous_framebuffer = g_bound_framebuffer;
+    if (previous_framebuffer) {
+        driver_bind_framebuffer(0);
+    }
+    frontend_overlay_gl_present();
+    if (previous_framebuffer) {
+        driver_bind_framebuffer(previous_framebuffer);
+    }
     EGLBoolean result = egl_backend_swap_buffers(display, surface);
     pace_frame();
     return result;
@@ -395,16 +586,44 @@ static const struct host_symbol HOST_SYMBOLS[] = {
 #define WRAPPED(name) {#name, (void *)(uintptr_t)&host_##name}
 
 static const struct host_symbol WRAPPED_SYMBOLS[] = {
-    WRAPPED(glAlphaFunc),     WRAPPED(glBlendColor),      WRAPPED(glClearColor),
-    WRAPPED(glClearDepthf),   WRAPPED(glClearDepthfOES),  WRAPPED(glColor4f),
-    WRAPPED(glDepthRangef),   WRAPPED(glDepthRangefOES),  WRAPPED(glDrawTexfOES),
-    WRAPPED(glFogf),          WRAPPED(glFrustumf),        WRAPPED(glFrustumfOES),
-    WRAPPED(glLightModelf),   WRAPPED(glLightf),          WRAPPED(glLineWidth),
-    WRAPPED(glMaterialf),     WRAPPED(glMultiTexCoord4f), WRAPPED(glNormal3f),
-    WRAPPED(glOrthof),        WRAPPED(glOrthofOES),       WRAPPED(glPointSize),
-    WRAPPED(glPolygonOffset), WRAPPED(glRotatef),         WRAPPED(glScalef),
-    WRAPPED(glTexEnvf),       WRAPPED(glTexGenfOES),      WRAPPED(glTranslatef),
-    WRAPPED(glUniform1f),     WRAPPED(glUniform4f),       WRAPPED(eglGetProcAddress),
+    WRAPPED(glAlphaFunc),
+    WRAPPED(glBindFramebuffer),
+    WRAPPED(glBindFramebufferOES),
+    WRAPPED(glBlendColor),
+    WRAPPED(glClearColor),
+    WRAPPED(glClearDepthf),
+    WRAPPED(glClearDepthfOES),
+    WRAPPED(glColor4f),
+    WRAPPED(glCopyTexImage2D),
+    WRAPPED(glCopyTexSubImage2D),
+    WRAPPED(glDepthRangef),
+    WRAPPED(glDepthRangefOES),
+    WRAPPED(glDrawTexfOES),
+    WRAPPED(glFogf),
+    WRAPPED(glFrustumf),
+    WRAPPED(glFrustumfOES),
+    WRAPPED(glGetIntegerv),
+    WRAPPED(glLightModelf),
+    WRAPPED(glLightf),
+    WRAPPED(glLineWidth),
+    WRAPPED(glMaterialf),
+    WRAPPED(glMultiTexCoord4f),
+    WRAPPED(glNormal3f),
+    WRAPPED(glOrthof),
+    WRAPPED(glOrthofOES),
+    WRAPPED(glPointSize),
+    WRAPPED(glPolygonOffset),
+    WRAPPED(glReadPixels),
+    WRAPPED(glRotatef),
+    WRAPPED(glScalef),
+    WRAPPED(glScissor),
+    WRAPPED(glTexEnvf),
+    WRAPPED(glTexGenfOES),
+    WRAPPED(glTranslatef),
+    WRAPPED(glUniform1f),
+    WRAPPED(glUniform4f),
+    WRAPPED(glViewport),
+    WRAPPED(eglGetProcAddress),
     WRAPPED(eglSwapBuffers),
 };
 

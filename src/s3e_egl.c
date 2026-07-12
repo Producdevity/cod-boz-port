@@ -523,7 +523,13 @@ static EGLBoolean host_eglQuerySurface(EGLDisplay display, EGLSurface surface, E
     if (!uses_sdl(display)) {
         EGLBoolean (*native)(EGLDisplay, EGLSurface, EGLint, EGLint *) =
             lookup_egl("eglQuerySurface");
-        return native ? native(display, surface, attribute, value) : 0;
+        EGLBoolean result = native ? native(display, surface, attribute, value) : 0;
+        if (result && value && attribute == EGL_WIDTH) {
+            *value = g_surface.width;
+        } else if (result && value && attribute == EGL_HEIGHT) {
+            *value = g_surface.height;
+        }
+        return result;
     }
     if (surface != (EGLSurface)g_sdl.window || !g_sdl.surface_valid || !value) {
         set_error(surface != (EGLSurface)g_sdl.window || !g_sdl.surface_valid ? EGL_BAD_SURFACE
@@ -531,9 +537,9 @@ static EGLBoolean host_eglQuerySurface(EGLDisplay display, EGLSurface surface, E
         return 0;
     }
     if (attribute == EGL_WIDTH) {
-        *value = g_native_window.width;
+        *value = g_surface.width;
     } else if (attribute == EGL_HEIGHT) {
-        *value = g_native_window.height;
+        *value = g_surface.height;
     } else {
         set_error(EGL_BAD_ATTRIBUTE);
         return 0;
