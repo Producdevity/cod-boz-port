@@ -367,6 +367,28 @@ static void service_finished_channels(void) {
     }
 }
 
+static int init_audio_subsystem(void) {
+    if (g_sdl_audio.InitSubSystem(SDL_INIT_AUDIO) == 0) {
+        return 1;
+    }
+
+    const char *requested_driver = getenv("SDL_AUDIODRIVER");
+    if (!requested_driver || !requested_driver[0]) {
+        fprintf(stderr, "[audio] SDL audio init failed: %s\n", mixer_error());
+        return 0;
+    }
+
+    fprintf(stderr, "[audio] SDL audio driver '%s' failed (%s); retrying automatic selection\n",
+            requested_driver, mixer_error());
+    unsetenv("SDL_AUDIODRIVER");
+    if (g_sdl_audio.InitSubSystem(SDL_INIT_AUDIO) == 0) {
+        return 1;
+    }
+
+    fprintf(stderr, "[audio] SDL audio init failed: %s\n", mixer_error());
+    return 0;
+}
+
 static int audio_open(void) {
     if (g_audio_tried) {
         return g_audio_ready;
@@ -417,8 +439,7 @@ static int audio_open(void) {
         fprintf(stderr, "[audio] SDL2_mixer symbols unavailable\n");
         return 0;
     }
-    if (g_sdl_audio.InitSubSystem(SDL_INIT_AUDIO) != 0) {
-        fprintf(stderr, "[audio] SDL audio init failed: %s\n", mixer_error());
+    if (!init_audio_subsystem()) {
         return 0;
     }
     if (g_mixer.Init) {
