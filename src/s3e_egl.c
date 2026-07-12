@@ -199,10 +199,21 @@ static int load_sdl_video(void) {
     return ok;
 }
 
+static void *try_graphics_library(const char *path, char *error, size_t error_size) {
+    dlerror();
+    void *library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+    if (!library && !error[0]) {
+        const char *reason = dlerror();
+        snprintf(error, error_size, "%s: %s", path, reason ? reason : "unknown error");
+    }
+    return library;
+}
+
 static void *open_graphics_library(const char *configured, const char *const *siblings,
-                                   const char *const *fallbacks) {
+                                   const char *const *fallbacks, char *error, size_t error_size) {
+    error[0] = '\0';
     if (configured && configured[0]) {
-        void *library = dlopen(configured, RTLD_NOW | RTLD_LOCAL);
+        void *library = try_graphics_library(configured, error, error_size);
         if (library) {
             return library;
         }
@@ -210,18 +221,27 @@ static void *open_graphics_library(const char *configured, const char *const *si
 
     char path[PATH_MAX];
     if (find_sdl_sibling_library(siblings, path, sizeof(path))) {
-        void *library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+        void *library = try_graphics_library(path, error, error_size);
         if (library) {
             return library;
         }
     }
-    return open_first(fallbacks);
+    for (size_t i = 0; fallbacks[i]; ++i) {
+        void *library = try_graphics_library(fallbacks[i], error, error_size);
+        if (library) {
+            return library;
+        }
+    }
+    return NULL;
 }
 
 bool egl_backend_load_libraries(void) {
     const char *egl_names[] = {"libEGL.so.1", "libEGL.so", "libmali.so", NULL};
     const char *gles1_names[] = {"libGLESv1_CM.so.1", "libGLESv1_CM.so", "libmali.so", NULL};
     const char *gles2_names[] = {"libGLESv2.so.2", "libGLESv2.so", "libmali.so", NULL};
+    char egl_error[512];
+    char gles1_error[512];
+    char gles2_error[512];
 
     if (!load_sdl_video()) {
         fprintf(stderr, "[egl] SDL2 video library is unavailable\n");
@@ -229,10 +249,22 @@ bool egl_backend_load_libraries(void) {
     }
     configure_sdl_graphics_libraries();
 
-    g_egl = open_graphics_library(getenv("SDL_VIDEO_EGL_DRIVER"), egl_names, egl_names);
-    g_gles1 = open_graphics_library(NULL, gles1_names, gles1_names);
-    g_gles2 = open_graphics_library(getenv("SDL_VIDEO_GL_DRIVER"), gles2_names, gles2_names);
+    g_egl = open_graphics_library(getenv("SDL_VIDEO_EGL_DRIVER"), egl_names, egl_names, egl_error,
+                                  sizeof(egl_error));
+    g_gles1 =
+        open_graphics_library(NULL, gles1_names, gles1_names, gles1_error, sizeof(gles1_error));
+    g_gles2 = open_graphics_library(getenv("SDL_VIDEO_GL_DRIVER"), gles2_names, gles2_names,
+                                    gles2_error, sizeof(gles2_error));
     if (!g_egl || !g_gles1 || !g_gles2) {
+        if (!g_egl) {
+            fprintf(stderr, "[egl] EGL load failed: %s\n", egl_error);
+        }
+        if (!g_gles1) {
+            fprintf(stderr, "[egl] OpenGL ES 1 load failed: %s\n", gles1_error);
+        }
+        if (!g_gles2) {
+            fprintf(stderr, "[egl] OpenGL ES 2 load failed: %s\n", gles2_error);
+        }
         fprintf(stderr, "[egl] compatible EGL and OpenGL ES libraries are required\n");
         if (g_egl) {
             dlclose(g_egl);
