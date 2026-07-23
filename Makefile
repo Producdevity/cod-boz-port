@@ -18,6 +18,7 @@ LOADER_LDLIBS += -ldl -pthread
 LOADER_SRC := \
   src/codboz_assets.c \
   src/main.c \
+  src/sdl_controller.c \
   src/s3e_config.c \
   src/s3e_audio.c \
   src/s3e_egl.c \
