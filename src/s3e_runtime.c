@@ -167,6 +167,7 @@ int32_t s3eDeviceUnRegister(uint32_t id, void *callback);
 
 uint64_t s3eDeviceYield(int32_t ms) {
     input_pump();
+    audio_pump();
     if (ms == INT32_MIN) {
         dispatch_due_timers();
         sleep_ms(1);
@@ -184,6 +185,7 @@ uint64_t s3eDeviceYieldUntilEvent(int32_t ms) {
 
 int32_t s3eDeviceCheckQuitRequest(void) {
     input_pump();
+    audio_pump();
     dispatch_due_timers();
     return g_device_quit_requested;
 }

@@ -224,6 +224,7 @@ EGLBoolean egl_backend_swap_buffers(EGLDisplay display, EGLSurface surface);
 void egl_backend_shutdown(void);
 void input_pump(void);
 void input_shutdown(void);
+void audio_pump(void);
 void audio_shutdown(void);
 void dispatch_due_timers(void);
 void *make_stub(const char *symbol);
@@ -341,9 +342,11 @@ int32_t s3eAudioRegister(uint32_t id, void *callback, void *user_data);
 int32_t s3eSoundGetFreeChannel(void);
 int32_t s3eSoundSetInt(uint32_t key, int32_t value);
 int32_t s3eSoundGetInt(uint32_t key);
-int32_t s3eSoundChannelRegister(uint32_t id, void *callback, void *user_data);
-int32_t s3eSoundChannelUnRegister(uint32_t id, void *callback);
-int32_t s3eSoundChannelPlay(int32_t channel, const void *data, uint32_t size, uint32_t repeat);
+int32_t s3eSoundChannelRegister(int32_t channel, uint32_t callback_type, void *callback,
+                                void *user_data);
+int32_t s3eSoundChannelUnRegister(int32_t channel, uint32_t callback_type);
+int32_t s3eSoundChannelPlay(int32_t channel, const void *data, uint32_t size, uint32_t repeat,
+                            uint32_t loop_index);
 int32_t s3eSoundChannelStop(int32_t channel);
 int32_t s3eSoundChannelPause(int32_t channel);
 int32_t s3eSoundChannelResume(int32_t channel);
