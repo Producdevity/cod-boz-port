@@ -133,7 +133,6 @@ static void test_inet_helpers(void) {
 
     assert(s3eInetAton(NULL, "not-an-address") == TEST_RESULT_ERROR);
     assert(s3eSocketGetError() == S3E_SOCKET_ERR_PARAM);
-    assert(s3eSocketGetError() == S3E_SOCKET_ERR_PARAM);
     assert(s3eSocketGetInt(S3E_SOCKET_MAX_SOCKETS) == 32);
     assert(s3eSocketGetError() == S3E_SOCKET_ERR_NONE);
     assert(s3eSocketGetInt(UINT32_MAX) == -1);
