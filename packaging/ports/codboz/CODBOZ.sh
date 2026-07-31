@@ -61,9 +61,12 @@ has_game_data() {
   [ -s "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
 }
 
-# shellcheck disable=SC2329
+# ShellCheck 0.9 reports trap handlers as unreachable (SC2317); 0.11 uses SC2329.
+# shellcheck disable=SC2317,SC2329
 on_signal() {
-  [ -n "${game_pid:-}" ] && kill -TERM "$game_pid" 2>/dev/null || true
+  if [ -n "${game_pid:-}" ]; then
+    kill -TERM "$game_pid" 2>/dev/null || true
+  fi
   pm_finish
   exit 130
 }
