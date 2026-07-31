@@ -119,8 +119,6 @@ files=(
   "$package_dir/cover.png"
   "$package_dir/screenshot.png"
 )
-licenses=("$payload/licenses/"*.txt)
-
 for required in "${executables[@]}"; do
   if [ ! -x "$required" ]; then
     echo "Missing executable: $required" >&2
@@ -135,12 +133,6 @@ for required in "${files[@]}"; do
     exit 1
   fi
 done
-if [ ! -e "${licenses[0]}" ]; then
-  echo "Missing packaging licenses in $payload/licenses" >&2
-  echo "Run scripts/build-docker.sh first." >&2
-  exit 1
-fi
-
 ssh "$host" 'sh -s' -- "$target_root" "$portdir" <<'REMOTE_CHECK'
 set -e
 root="$1"
@@ -173,7 +165,7 @@ scp "$package_dir/cover.png" "$host:$gamedir/cover.png.tmp"
 scp "$package_dir/screenshot.png" "$host:$gamedir/screenshot.png.tmp"
 scp "$payload/libs.armhf/libSDL2_mixer-2.0.so.0" \
   "$host:$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0.tmp"
-scp "${licenses[@]}" "$host:$gamedir/licenses/"
+scp "$payload/licenses/"*.txt "$host:$gamedir/licenses/"
 
 ssh "$host" 'sh -s' -- "$gamedir" "$portdir" <<'REMOTE_INSTALL'
 set -e
