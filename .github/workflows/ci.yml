@@ -35,3 +35,9 @@ jobs:
         run: scripts/build-docker.sh
       - name: Verify archive
         run: unzip -t build/codboz.zip
+      - name: Upload PortMaster package
+        uses: actions/upload-artifact@v4
+        with:
+          name: codboz-portmaster
+          path: build/codboz.zip
+          if-no-files-found: error
