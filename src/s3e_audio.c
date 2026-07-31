@@ -134,7 +134,6 @@ struct sound_slot {
 struct audio_slot {
     void *chunk;
     atomic_int finished;
-    struct sound_callback callbacks[S3E_AUDIO_CALLBACK_COUNT];
     int volume_s3e;
     int volume_mix;
     int paused;
@@ -146,6 +145,7 @@ static struct sdl_audio_api g_sdl_audio;
 static struct sdl_mixer_api g_mixer;
 static struct sound_slot g_sound_slots[SOUND_CHANNELS];
 static struct audio_slot g_audio_slots[AUDIO_CHANNELS];
+static struct sound_callback g_audio_callbacks[S3E_AUDIO_CALLBACK_COUNT];
 static int g_audio_tried;
 static int g_audio_ready;
 static int g_audio_channel;
@@ -186,6 +186,16 @@ static const char *mixer_error(void) {
             return error;
         }
     }
+    if (g_sdl_audio.GetError) {
+        const char *error = g_sdl_audio.GetError();
+        if (error && error[0]) {
+            return error;
+        }
+    }
+    return "unknown error";
+}
+
+static const char *sdl_error(void) {
     if (g_sdl_audio.GetError) {
         const char *error = g_sdl_audio.GetError();
         if (error && error[0]) {
@@ -345,7 +355,10 @@ static int render_generator_audio(int channel, const void *data, uint32_t sample
         return 0;
     }
 
-    if (samples > (UINT32_MAX - SOUND_GENERATOR_CHUNK_SAMPLES) / SOUND_GENERATOR_MAX_EXPANSION) {
+    size_t max_samples = (SIZE_MAX / sizeof(int16_t) - SOUND_GENERATOR_CHUNK_SAMPLES) /
+                         SOUND_GENERATOR_MAX_EXPANSION;
+    if (samples > (UINT32_MAX - SOUND_GENERATOR_CHUNK_SAMPLES) / SOUND_GENERATOR_MAX_EXPANSION ||
+        (size_t)samples > max_samples) {
         return -1;
     }
     uint32_t limit = samples * SOUND_GENERATOR_MAX_EXPANSION + SOUND_GENERATOR_CHUNK_SAMPLES;
@@ -378,6 +391,10 @@ static int render_generator_audio(int channel, const void *data, uint32_t sample
         uint32_t requested = capacity - written;
         if (requested > SOUND_GENERATOR_CHUNK_SAMPLES) {
             requested = SOUND_GENERATOR_CHUNK_SAMPLES;
+        }
+        if ((uintptr_t)(pcm + written) > UINT32_MAX || (uintptr_t)data > UINT32_MAX) {
+            free(pcm);
+            return -1;
         }
         struct s3e_sound_gen_audio_info info = {
             .channel = channel,
@@ -617,7 +634,7 @@ static int audio_open(void) {
 
 static void notify_audio_stopped(int channel) {
     int32_t system_data = channel;
-    invoke_callback(&g_audio_slots[channel].callbacks[S3E_AUDIO_STOP], &system_data);
+    invoke_callback(&g_audio_callbacks[S3E_AUDIO_STOP], &system_data);
 }
 
 static void stop_audio_channel(int channel, int notify) {
@@ -790,7 +807,7 @@ static void audio_unit_activate(void) {
                 g_audio_unit_capture_device = 0;
             }
             fprintf(stderr, "[voice] no compatible mono microphone is available: %s\n",
-                    mixer_error());
+                    sdl_error());
         }
     }
 }
@@ -869,18 +886,11 @@ static int play_audio_buffer(const void *buffer, uint32_t size, uint32_t repeat)
     int channel = g_audio_channel;
     stop_audio_channel(channel, 1);
 
-    uint8_t *copy = malloc(size);
-    if (!copy) {
-        return 1;
-    }
-    memcpy(copy, buffer, size);
-    void *rw = g_sdl_audio.RWFromConstMem(copy, (int)size);
+    void *rw = g_sdl_audio.RWFromConstMem(buffer, (int)size);
     if (!rw) {
-        free(copy);
         return 1;
     }
     void *chunk = g_mixer.LoadWAV_RW(rw, 1);
-    free(copy);
     if (!chunk) {
         fprintf(stderr, "[audio] stream load failed on channel %d: %s\n", channel, mixer_error());
         return 1;
@@ -904,8 +914,8 @@ void audio_shutdown(void) {
     audio_unit_backend_shutdown();
     for (int channel = 0; channel < AUDIO_CHANNELS; ++channel) {
         stop_audio_channel(channel, 0);
-        memset(g_audio_slots[channel].callbacks, 0, sizeof(g_audio_slots[channel].callbacks));
     }
+    memset(g_audio_callbacks, 0, sizeof(g_audio_callbacks));
     for (int channel = 0; channel < SOUND_CHANNELS; ++channel) {
         if (g_audio_ready && g_mixer.HaltChannel) {
             g_mixer.HaltChannel(channel);
@@ -1049,8 +1059,8 @@ int32_t s3eAudioRegister(uint32_t id, void *callback, void *user_data) {
     if (id >= S3E_AUDIO_CALLBACK_COUNT || !callback) {
         return 1;
     }
-    g_audio_slots[g_audio_channel].callbacks[id].function = callback;
-    g_audio_slots[g_audio_channel].callbacks[id].user_data = user_data;
+    g_audio_callbacks[id].function = callback;
+    g_audio_callbacks[id].user_data = user_data;
     return 0;
 }
 
@@ -1114,7 +1124,8 @@ int32_t s3eSoundGetInt(uint32_t key) {
 int32_t s3eSoundChannelRegister(int32_t channel, uint32_t callback_type, void *callback,
                                 void *user_data) {
     init_sound_slots();
-    if (!sound_channel_valid(channel) || callback_type >= S3E_CHANNEL_CALLBACK_COUNT || !callback) {
+    if (!sound_channel_valid(channel) || callback_type >= S3E_CHANNEL_CALLBACK_COUNT ||
+        callback_type == S3E_CHANNEL_GEN_AUDIO_STEREO || !callback) {
         return 1;
     }
     g_sound_slots[channel].callbacks[callback_type].function = callback;

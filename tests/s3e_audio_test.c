@@ -4,8 +4,11 @@
 
 enum {
     TEST_MIXER_CHANNELS = 40,
+    TEST_SOUND_CHANNELS = 24,
     TEST_SOUND_END_CALLBACK = 0,
     TEST_SOUND_STOP_CALLBACK = 2,
+    TEST_SOUND_STEREO_GENERATOR_CALLBACK = 3,
+    TEST_AUDIO_STOP_CALLBACK = 2,
     TEST_WAV_HEADER_SIZE = 44,
 };
 
@@ -29,11 +32,20 @@ static int g_last_loops;
 static void (*g_finished_callback)(int channel);
 static int g_end_calls;
 static int g_stop_calls;
+static int g_audio_stop_calls;
+static int g_stopped_audio_channel;
 static int g_last_reps_remaining;
 
 static uint32_t read_le32(const uint8_t *bytes) {
     return (uint32_t)bytes[0] | (uint32_t)bytes[1] << 8 | (uint32_t)bytes[2] << 16 |
            (uint32_t)bytes[3] << 24;
+}
+
+static void write_le32(uint8_t *bytes, uint32_t value) {
+    bytes[0] = (uint8_t)value;
+    bytes[1] = (uint8_t)(value >> 8);
+    bytes[2] = (uint8_t)(value >> 16);
+    bytes[3] = (uint8_t)(value >> 24);
 }
 
 static int fake_sdl_init(uint32_t flags) {
@@ -207,6 +219,14 @@ static int32_t stop_callback(void *system_data, void *user_data) {
     return 0;
 }
 
+static int32_t audio_stop_callback(void *system_data, void *user_data) {
+    (void)user_data;
+    assert(system_data);
+    g_stopped_audio_channel = *(const int32_t *)system_data;
+    ++g_audio_stop_calls;
+    return 0;
+}
+
 static const int16_t *chunk_samples(int channel, uint32_t *sample_count) {
     struct test_chunk *chunk = g_channels[channel];
     assert(chunk && chunk->size >= TEST_WAV_HEADER_SIZE);
@@ -263,7 +283,7 @@ static void test_stream_repeat_contract(void) {
     uint8_t wav[TEST_WAV_HEADER_SIZE + sizeof(int16_t)] = {0};
     memcpy(wav, "RIFF", 4);
     uint32_t riff_size = sizeof(wav) - 8;
-    memcpy(wav + 4, &riff_size, sizeof(riff_size));
+    write_le32(wav + 4, riff_size);
 
     assert(s3eAudioPlayFromBuffer(wav, sizeof(wav), 0) == 0);
     assert(g_last_loops == -1);
@@ -274,10 +294,32 @@ static void test_stream_repeat_contract(void) {
     assert(s3eAudioStop() == 0);
 }
 
+static void test_audio_callbacks_are_global(void) {
+    uint8_t wav[TEST_WAV_HEADER_SIZE + sizeof(int16_t)] = {0};
+    memcpy(wav, "RIFF", 4);
+    write_le32(wav + 4, sizeof(wav) - 8);
+
+    assert(s3eAudioSetInt(4, 0) == 0);
+    assert(s3eAudioRegister(TEST_AUDIO_STOP_CALLBACK, (void *)(uintptr_t)&audio_stop_callback,
+                            NULL) == 0);
+    assert(s3eAudioSetInt(4, 1) == 0);
+    assert(s3eAudioPlayFromBuffer(wav, sizeof(wav), 1) == 0);
+    finish_channel(TEST_SOUND_CHANNELS + 1);
+    assert(g_audio_stop_calls == 1);
+    assert(g_stopped_audio_channel == 1);
+}
+
+static void test_stereo_generator_is_rejected(void) {
+    assert(s3eSoundChannelRegister(0, TEST_SOUND_STEREO_GENERATOR_CALLBACK,
+                                   (void *)(uintptr_t)&stop_callback, NULL) == 1);
+}
+
 int main(void) {
     test_sound_repeat_and_loop();
     test_raw_pcm_and_explicit_stop();
     test_stream_repeat_contract();
+    test_audio_callbacks_are_global();
+    test_stereo_generator_is_rejected();
     audio_shutdown();
     puts("s3e audio tests passed");
     return 0;
