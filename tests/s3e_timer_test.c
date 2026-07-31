@@ -257,8 +257,16 @@ static void test_localtime_offset_tracks_dst(void) {
 
     uint64_t winter_utc_ms = UINT64_C(1704110400) * 1000u;
     uint64_t summer_utc_ms = UINT64_C(1719835200) * 1000u;
+    uint64_t before_spring_transition_ms = UINT64_C(1711846799) * 1000u;
+    uint64_t after_spring_transition_ms = UINT64_C(1711846800) * 1000u;
+    uint64_t before_autumn_transition_ms = UINT64_C(1729990799) * 1000u;
+    uint64_t after_autumn_transition_ms = UINT64_C(1729990800) * 1000u;
     assert(s3eTimerGetLocaltimeOffset(&winter_utc_ms) == 60 * 60 * 1000);
     assert(s3eTimerGetLocaltimeOffset(&summer_utc_ms) == 2 * 60 * 60 * 1000);
+    assert(s3eTimerGetLocaltimeOffset(&before_spring_transition_ms) == 60 * 60 * 1000);
+    assert(s3eTimerGetLocaltimeOffset(&after_spring_transition_ms) == 2 * 60 * 60 * 1000);
+    assert(s3eTimerGetLocaltimeOffset(&before_autumn_transition_ms) == 2 * 60 * 60 * 1000);
+    assert(s3eTimerGetLocaltimeOffset(&after_autumn_transition_ms) == 60 * 60 * 1000);
 
     if (saved_timezone) {
         result = setenv("TZ", saved_timezone, 1);

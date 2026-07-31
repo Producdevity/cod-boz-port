@@ -131,11 +131,6 @@ uint64_t s3eTimerGetUTC(void) {
 int64_t s3eTimerGetLocaltimeOffset(const uint64_t *utc_ms) {
     time_t now = utc_ms ? (time_t)(*utc_ms / 1000u) : time(NULL);
     struct tm local_tm;
-    struct tm utc_tm;
     localtime_r(&now, &local_tm);
-    gmtime_r(&now, &utc_tm);
-    utc_tm.tm_isdst = local_tm.tm_isdst;
-    time_t local = mktime(&local_tm);
-    time_t utc = mktime(&utc_tm);
-    return (int64_t)difftime(local, utc) * 1000;
+    return (int64_t)local_tm.tm_gmtoff * 1000;
 }
