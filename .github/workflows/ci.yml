@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check and build ARMHF package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Install host checks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format shellcheck
+      - name: Run host checks
+        run: make check
+      - name: Run sanitizers
+        run: make test-host-sanitize
+      - name: Build ARMHF package
+        run: scripts/build-docker.sh
+      - name: Verify archive
+        run: unzip -t build/codboz.zip
