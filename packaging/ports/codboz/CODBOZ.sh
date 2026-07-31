@@ -119,10 +119,10 @@ if [ "${CFW_NAME:-}" = "knulli" ] && [ -S /var/run/pipewire-0 ]; then
 fi
 
 export LD_LIBRARY_PATH="$gamedir/libs.armhf:${LD_LIBRARY_PATH:-}"
-if [ "${CFW_NAME:-}" = "knulli" ] && [ "${DEVICE_NAME:-}" = "RG40XX-H" ]; then
-  export SDL_GAMECONTROLLERCONFIG='19000000010000000100000000010000,Anbernic RG40XX-H Controller,a:b4,b:b3,x:b5,y:b6,leftshoulder:b7,rightshoulder:b8,lefttrigger:b13,righttrigger:b14,guide:b11,start:b10,back:b9,dpup:h0.1,dpleft:h0.8,dpright:h0.2,dpdown:h0.4,volumedown:b1,volumeup:b2,leftx:a0,lefty:a1,leftstick:b12,rightx:a2,righty:a3,rightstick:b15,platform:Linux,'
-elif [ -n "${sdl_controllerconfig:-}" ]; then
+if [ -n "${sdl_controllerconfig:-}" ]; then
   export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
+elif [ "${CFW_NAME:-}" = "knulli" ] && [ "${DEVICE_NAME:-}" = "RG40XX-H" ]; then
+  export SDL_GAMECONTROLLERCONFIG='19000000010000000100000000010000,Anbernic RG40XX-H Controller,a:b4,b:b3,x:b5,y:b6,leftshoulder:b7,rightshoulder:b8,lefttrigger:b13,righttrigger:b14,guide:b11,start:b10,back:b9,dpup:h0.1,dpleft:h0.8,dpright:h0.2,dpdown:h0.4,volumedown:b1,volumeup:b2,leftx:a0,lefty:a1,leftstick:b12,rightx:a2,righty:a3,rightstick:b15,platform:Linux,'
 fi
 
 if [ -n "${GPTOKEYB:-}" ]; then

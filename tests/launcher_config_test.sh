@@ -32,4 +32,22 @@ grep -qx 'multiplayer_server=192.168.178.37' "$game_dir/config.txt"
 grep -qx 'multiplayer_proxy=0' "$game_dir/config.txt"
 test "$(grep -c '^voice_chat=0$' "$game_dir/config.txt")" -eq 1
 
+printf 'game-data\n' > "$game_dir/assets/boz.s3e.unpacked"
+printf 'game-data\n' > "$game_dir/assets/blackops_etc.dz"
+printf 'game-data\n' > "$game_dir/assets/blackops_gles1.dz"
+cat > "$game_dir/codboz_s3e_loader" <<'LOADER'
+#!/bin/sh
+printf '%s\n' "$SDL_GAMECONTROLLERCONFIG" > "$CONTROLLER_RESULT"
+LOADER
+chmod 755 "$game_dir/codboz_s3e_loader"
+
+controller_result="$test_root/controller.txt"
+XDG_DATA_HOME="$xdg_data" \
+  CFW_NAME=knulli \
+  DEVICE_NAME=RG40XX-H \
+  CONTROLLER_RESULT="$controller_result" \
+  sdl_controllerconfig='custom-controller-mapping' \
+  bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1
+grep -qx 'custom-controller-mapping' "$controller_result"
+
 echo "launcher config tests passed"

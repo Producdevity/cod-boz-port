@@ -19,8 +19,10 @@ static void write_known_id(const char *path) {
     }
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     assert(fd >= 0);
-    assert(write(fd, bytes, sizeof(bytes)) == (ssize_t)sizeof(bytes));
-    assert(close(fd) == 0);
+    ssize_t written = write(fd, bytes, sizeof(bytes));
+    assert(written == (ssize_t)sizeof(bytes));
+    int result = close(fd);
+    assert(result == 0);
 }
 
 int main(void) {
@@ -47,8 +49,10 @@ int main(void) {
     assert(s3e_device_id_load_or_create(g_root, second));
     assert(strcmp(second, "000102030405060708090a0b0c0d0e0f") == 0);
 
-    assert(unlink(path) == 0);
-    assert(rmdir(g_root) == 0);
+    int result = unlink(path);
+    assert(result == 0);
+    result = rmdir(g_root);
+    assert(result == 0);
     puts("device ID tests passed");
     return 0;
 }
