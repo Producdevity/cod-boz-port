@@ -1,0 +1,3 @@
+multiplayer_server=
+multiplayer_proxy=0
+voice_chat=0

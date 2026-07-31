@@ -12,12 +12,6 @@ struct dtrz_index g_dtrz;
 struct memory_file *g_memory_files;
 struct timer_event *g_timers;
 pthread_mutex_t g_timer_mutex = PTHREAD_MUTEX_INITIALIZER;
-uint32_t g_next_timer_id = 1;
-int g_memory_error;
-struct s3e_user_mem_mgr g_user_mem_mgr;
-int g_user_mem_mgr_set;
-__thread int g_in_user_mem_mgr;
-struct s3e_heap g_heaps[8];
 struct fbdev_window g_native_window = {640, 480};
 struct surface_geometry g_surface = {0, 0, 640, 480};
 uint32_t *g_surface_pixels;
@@ -162,6 +156,9 @@ static void close_all_memory_files(void) {
 }
 
 void s3e_host_shutdown(void) {
+    (void)s3eMemorySetUserMemMgr(NULL);
+    s3e_zero_conf_shutdown();
+    s3e_socket_shutdown();
     audio_shutdown();
     input_shutdown();
     egl_backend_shutdown();
