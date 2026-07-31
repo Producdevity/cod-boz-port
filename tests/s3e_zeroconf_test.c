@@ -22,6 +22,8 @@ struct callback_state {
     int found_count;
     int update_count;
     int lost_count;
+    uint8_t reentrant_packet[TEST_PACKET_SIZE];
+    size_t reentrant_packet_size;
 };
 
 static int32_t found_callback(void *search, void *system_data, void *user_data) {
@@ -55,6 +57,11 @@ static int32_t update_callback(void *search, void *system_data, void *user_data)
         snprintf(state->txt, sizeof(state->txt), "%s", update->txt_records[0]);
     }
     ++state->update_count;
+    if (state->reentrant_packet_size) {
+        size_t packet_size = state->reentrant_packet_size;
+        state->reentrant_packet_size = 0;
+        s3e_zero_conf_process_packet(state->reentrant_packet, packet_size, NULL);
+    }
     return 0;
 }
 
@@ -127,9 +134,8 @@ static void assert_sent_txt(size_t index, const char *expected) {
 static void test_discovery_lifecycle(void) {
     zeroconf_platform_fake_reset();
     struct callback_state state = {0};
-    state.search = s3eZeroConfStartSearch(
-        "_PROJECT_KIWI._tcp", NULL, (void *)(uintptr_t)found_callback,
-        (void *)(uintptr_t)update_callback, (void *)(uintptr_t)lost_callback, &state);
+    state.search = s3eZeroConfStartSearch("_PROJECT_KIWI._tcp", NULL, found_callback,
+                                          update_callback, lost_callback, &state);
     assert(state.search);
     assert(zeroconf_platform_fake_sent_count() == 1);
 
@@ -150,21 +156,44 @@ static void test_discovery_lifecycle(void) {
     assert(state.found_count == 1 && state.update_count == 0);
 
     packet_size = build_service_packet(packet, sizeof(packet), 32145, "version=2", 120, false);
+    state.reentrant_packet_size = build_service_packet(
+        state.reentrant_packet, sizeof(state.reentrant_packet), 32145, "version=3", 120, false);
     s3e_zero_conf_process_packet(packet, packet_size, NULL);
-    assert(state.update_count == 1);
-    assert(strcmp(state.txt, "version=2") == 0);
+    assert(state.update_count == 2);
+    assert(strcmp(state.txt, "version=3") == 0);
 
     void *first_service_id = state.service_id;
-    packet_size = build_service_packet(packet, sizeof(packet), 32146, "version=2", 120, false);
+    packet_size = build_service_packet(packet, sizeof(packet), 32146, "version=3", 120, false);
     s3e_zero_conf_process_packet(packet, packet_size, NULL);
     assert(state.lost_count == 1);
     assert(state.found_count == 2);
     assert(state.service_id != first_service_id);
     assert(state.port == htons(32146));
 
-    packet_size = build_service_packet(packet, sizeof(packet), 32146, "version=2", 0, true);
+    packet_size = build_service_packet(packet, sizeof(packet), 32146, "version=3", 0, true);
     s3e_zero_conf_process_packet(packet, packet_size, NULL);
     assert(state.lost_count == 2);
+
+    s3eZeroConfStopSearch(state.search);
+    s3e_zero_conf_shutdown();
+}
+
+static void test_discovery_ttl_expiry(void) {
+    zeroconf_platform_fake_reset();
+    struct callback_state state = {0};
+    state.search = s3eZeroConfStartSearch("_PROJECT_KIWI._tcp", NULL, found_callback,
+                                          update_callback, lost_callback, &state);
+    assert(state.search);
+
+    uint8_t packet[TEST_PACKET_SIZE];
+    size_t packet_size = build_service_packet(packet, sizeof(packet), 32145, "version=1", 1, false);
+    s3e_zero_conf_process_packet(packet, packet_size, NULL);
+    assert(state.found_count == 1);
+    assert(state.lost_count == 0);
+
+    zeroconf_platform_fake_advance(1001);
+    s3e_zero_conf_pump();
+    assert(state.lost_count == 1);
 
     s3eZeroConfStopSearch(state.search);
     s3e_zero_conf_shutdown();
@@ -209,6 +238,7 @@ static void test_publish_lifecycle(void) {
 
 int main(void) {
     test_discovery_lifecycle();
+    test_discovery_ttl_expiry();
     test_publish_lifecycle();
     puts("s3e ZeroConf tests passed");
     return 0;

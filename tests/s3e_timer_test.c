@@ -197,6 +197,32 @@ static void test_callback_can_reschedule_itself(void) {
     assert(g_timers == NULL);
 }
 
+static int32_t immediate_reschedule_callback(void *system_data, void *user_data) {
+    assert(system_data == NULL);
+    struct reschedule_context *context = user_data;
+    ++context->calls;
+    if (context->calls == 1) {
+        assert(s3eTimerSetTimer(0, callback_pointer(immediate_reschedule_callback), context) ==
+               TEST_RESULT_SUCCESS);
+    }
+    return 1;
+}
+
+static void test_immediate_reschedule_waits_for_next_dispatch(void) {
+    reset_timers();
+    struct reschedule_context context = {0};
+    assert(s3eTimerSetTimer(0, callback_pointer(immediate_reschedule_callback), &context) ==
+           TEST_RESULT_SUCCESS);
+
+    dispatch_due_timers();
+    assert(context.calls == 1);
+    assert(timer_count() == 1);
+
+    dispatch_due_timers();
+    assert(context.calls == 2);
+    assert(g_timers == NULL);
+}
+
 static void test_timer_capacity(void) {
     reset_timers();
     void *callback = callback_pointer(record_callback);
@@ -222,13 +248,37 @@ static void test_elapsed_timer(void) {
     assert(s3eTimerGetMs() == 0);
 }
 
+static void test_localtime_offset_tracks_dst(void) {
+    const char *current_timezone = getenv("TZ");
+    char *saved_timezone = current_timezone ? strdup(current_timezone) : NULL;
+    int result = setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+    assert(result == 0);
+    tzset();
+
+    uint64_t winter_utc_ms = UINT64_C(1704110400) * 1000u;
+    uint64_t summer_utc_ms = UINT64_C(1719835200) * 1000u;
+    assert(s3eTimerGetLocaltimeOffset(&winter_utc_ms) == 60 * 60 * 1000);
+    assert(s3eTimerGetLocaltimeOffset(&summer_utc_ms) == 2 * 60 * 60 * 1000);
+
+    if (saved_timezone) {
+        result = setenv("TZ", saved_timezone, 1);
+    } else {
+        result = unsetenv("TZ");
+    }
+    assert(result == 0);
+    free(saved_timezone);
+    tzset();
+}
+
 int main(void) {
     test_set_and_cancel_contract();
     test_due_order_and_one_shot_dispatch();
     test_callback_can_cancel_pending_timer();
     test_callback_can_reschedule_itself();
+    test_immediate_reschedule_waits_for_next_dispatch();
     test_timer_capacity();
     test_elapsed_timer();
+    test_localtime_offset_tracks_dst();
     reset_timers();
     puts("s3e timer tests passed");
     return 0;

@@ -65,9 +65,9 @@ struct zero_conf_search {
     char service_type[MDNS_WIRE_MAX_NAME];
     char domain[MDNS_WIRE_MAX_NAME];
     char service_fqdn[MDNS_WIRE_MAX_NAME];
-    void *found_callback;
-    void *update_callback;
-    void *lost_callback;
+    s3e_zeroconf_callback_fn found_callback;
+    s3e_zeroconf_callback_fn update_callback;
+    s3e_zeroconf_callback_fn lost_callback;
     void *user_data;
     uint64_t next_query_ms;
     struct zero_conf_discovered discovered[ZERO_CONF_MAX_DISCOVERED];
@@ -108,6 +108,12 @@ static struct in_addr g_mdns_interface;
 static int g_mdns_interface_valid;
 static unsigned int g_callback_depth;
 static struct zero_conf_service_id *g_retired_service_ids;
+
+static void mark_discovered_changed(struct zero_conf_discovered *entry) {
+    if (++entry->change_sequence == 0) {
+        ++entry->change_sequence;
+    }
+}
 
 static uint64_t zero_conf_now_ms(void) {
     return zeroconf_platform_now_ms();
@@ -491,6 +497,7 @@ static void apply_cached_address(struct zero_conf_search *search,
     if (!address || !address->expires_at_ms || address->expires_at_ms <= now) {
         return;
     }
+    mark_discovered_changed(entry);
     if (entry->has_ipv4 && memcmp(entry->ipv4, address->ipv4, sizeof(entry->ipv4)) != 0) {
         entry->endpoint_changed = 1;
     }
@@ -532,7 +539,7 @@ static void dispatch_found(struct zero_conf_search *search, struct zero_conf_dis
     memcpy(&data.ipv4_address, entry->ipv4, sizeof(data.ipv4_address));
     entry->notified = 1;
     callback_enter();
-    ((s3e_zeroconf_callback_fn)(uintptr_t)search->found_callback)(search, &data, search->user_data);
+    search->found_callback(search, &data, search->user_data);
     callback_leave();
 }
 
@@ -552,19 +559,18 @@ static void dispatch_update(struct zero_conf_search *search, struct zero_conf_di
         .txt_records = txt_records,
     };
     callback_enter();
-    ((s3e_zeroconf_callback_fn)(uintptr_t)search->update_callback)(search, &data,
-                                                                   search->user_data);
+    search->update_callback(search, &data, search->user_data);
     callback_leave();
 }
 
 static void dispatch_lost(struct zero_conf_search *search, struct zero_conf_discovered *entry,
                           void *service_id) {
-    void *callback = search->lost_callback;
+    s3e_zeroconf_callback_fn callback = search->lost_callback;
     void *user_data = search->user_data;
     entry->notified = 0;
     if (callback) {
         callback_enter();
-        ((s3e_zeroconf_callback_fn)(uintptr_t)callback)(search, service_id, user_data);
+        callback(search, service_id, user_data);
         callback_leave();
     }
 }
@@ -598,6 +604,7 @@ static void apply_ptr_records(struct zero_conf_search *search,
         if (!record->ttl) {
             struct zero_conf_discovered *entry = find_discovered(search, record->data.ptr.target);
             if (entry) {
+                mark_discovered_changed(entry);
                 entry->has_ptr = 0;
                 entry->ptr_expires_at_ms = 0;
                 entry->remove = 1;
@@ -608,6 +615,7 @@ static void apply_ptr_records(struct zero_conf_search *search,
         if (!entry) {
             continue;
         }
+        mark_discovered_changed(entry);
         entry->has_ptr = 1;
         entry->ptr_expires_at_ms = expiry_from_ttl(now, record->ttl);
         entry->remove = 0;
@@ -635,6 +643,7 @@ static void apply_service_records(struct zero_conf_search *search,
             continue;
         }
         if (!record->ttl) {
+            mark_discovered_changed(entry);
             if (record->data_kind == MDNS_WIRE_RDATA_SRV) {
                 entry->has_srv = 0;
                 entry->srv_expires_at_ms = 0;
@@ -647,6 +656,7 @@ static void apply_service_records(struct zero_conf_search *search,
             continue;
         }
         if (record->data_kind == MDNS_WIRE_RDATA_SRV) {
+            mark_discovered_changed(entry);
             uint16_t port = effective_service_port(search, record->data.srv.port);
             int host_changed =
                 entry->host[0] && !name_matches(entry->host, record->data.srv.target);
@@ -686,6 +696,7 @@ static void apply_service_records(struct zero_conf_search *search,
         if (!valid) {
             continue;
         }
+        mark_discovered_changed(entry);
         if (entry->has_txt &&
             (entry->txt_count != count || memcmp(entry->txt, updated, sizeof(updated)) != 0)) {
             entry->txt_changed = 1;
@@ -712,6 +723,7 @@ static void apply_address_records(struct zero_conf_search *search,
             for (size_t item = 0; item < ZERO_CONF_MAX_DISCOVERED; ++item) {
                 struct zero_conf_discovered *entry = &search->discovered[item];
                 if (entry->in_use && entry->has_srv && name_matches(entry->host, record->owner)) {
+                    mark_discovered_changed(entry);
                     entry->has_ipv4 = 0;
                     entry->a_expires_at_ms = 0;
                     entry->next_a_query_ms = 0;
@@ -730,6 +742,7 @@ static void apply_address_records(struct zero_conf_search *search,
             if (!entry->in_use || !entry->has_srv || !name_matches(entry->host, record->owner)) {
                 continue;
             }
+            mark_discovered_changed(entry);
             if (entry->has_ipv4 &&
                 memcmp(entry->ipv4, record->data.a.address, sizeof(entry->ipv4)) != 0) {
                 entry->endpoint_changed = 1;
@@ -864,33 +877,39 @@ void s3e_zero_conf_process_packet(const uint8_t *data, size_t data_size,
     if (!data || !data_size) {
         return;
     }
-    struct mdns_wire_packet packet;
-    enum mdns_wire_status status = mdns_wire_parse_packet(data, data_size, &packet);
-    if (status != MDNS_WIRE_OK) {
+    struct mdns_wire_packet *packet = malloc(sizeof(*packet));
+    if (!packet) {
         return;
     }
-    if (packet.flags & MDNS_WIRE_FLAG_QR) {
+    enum mdns_wire_status status = mdns_wire_parse_packet(data, data_size, packet);
+    if (status != MDNS_WIRE_OK) {
+        free(packet);
+        return;
+    }
+    if (packet->flags & MDNS_WIRE_FLAG_QR) {
         uint64_t now = zero_conf_now_ms();
         for (size_t i = 0; i < ZERO_CONF_MAX_SEARCHES; ++i) {
             struct zero_conf_search *search = &g_searches[i];
             if (!search->in_use) {
                 continue;
             }
-            apply_ptr_records(search, &packet, now);
-            apply_service_records(search, &packet, now);
-            apply_address_records(search, &packet, now);
+            apply_ptr_records(search, packet, now);
+            apply_service_records(search, packet, now);
+            apply_address_records(search, packet, now);
             send_followup_queries(search, now);
             dispatch_search_changes(search);
         }
+        free(packet);
         return;
     }
     for (size_t i = 0; i < ZERO_CONF_MAX_PUBLISHERS; ++i) {
         struct zero_conf_publisher *publisher = &g_publishers[i];
         int unicast_response = 0;
-        if (publisher->in_use && publisher_matches_query(publisher, &packet, &unicast_response)) {
+        if (publisher->in_use && publisher_matches_query(publisher, packet, &unicast_response)) {
             send_publication(publisher, 0, unicast_response && source ? source : NULL);
         }
     }
+    free(packet);
 }
 
 static void expire_discovered(uint64_t now) {
@@ -911,26 +930,31 @@ static void expire_discovered(uint64_t now) {
                 continue;
             }
             if (entry->has_ptr && entry->ptr_expires_at_ms && entry->ptr_expires_at_ms <= now) {
+                mark_discovered_changed(entry);
                 entry->has_ptr = 0;
                 entry->ptr_expires_at_ms = 0;
                 entry->remove = 1;
             }
             if (entry->has_srv && entry->srv_expires_at_ms && entry->srv_expires_at_ms <= now) {
+                mark_discovered_changed(entry);
                 entry->has_srv = 0;
                 entry->srv_expires_at_ms = 0;
                 entry->next_srv_query_ms = 0;
             }
             if (entry->has_txt && entry->txt_expires_at_ms && entry->txt_expires_at_ms <= now) {
+                mark_discovered_changed(entry);
                 entry->has_txt = 0;
                 entry->txt_expires_at_ms = 0;
                 entry->next_txt_query_ms = 0;
             }
             if (entry->has_ipv4 && entry->a_expires_at_ms && entry->a_expires_at_ms <= now) {
+                mark_discovered_changed(entry);
                 entry->has_ipv4 = 0;
                 entry->a_expires_at_ms = 0;
                 entry->next_a_query_ms = 0;
             }
             if (!entry->has_ptr && !entry->has_srv && !entry->has_txt) {
+                mark_discovered_changed(entry);
                 entry->remove = 1;
             }
         }
@@ -966,8 +990,10 @@ static void clear_search(struct zero_conf_search *search) {
     memset(search, 0, sizeof(*search));
 }
 
-void *s3eZeroConfStartSearch(const char *service_type, const char *domain, void *found_callback,
-                             void *update_callback, void *lost_callback, void *user_data) {
+void *s3eZeroConfStartSearch(const char *service_type, const char *domain,
+                             s3e_zeroconf_callback_fn found_callback,
+                             s3e_zeroconf_callback_fn update_callback,
+                             s3e_zeroconf_callback_fn lost_callback, void *user_data) {
     if (!service_type) {
         return NULL;
     }

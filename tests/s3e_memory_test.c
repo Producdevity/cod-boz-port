@@ -92,8 +92,10 @@ static void test_user_manager_is_thread_local(void) {
     assert(s3eMemoryGetUserMemMgr(&main_manager) == 0);
 
     pthread_t thread;
-    assert(pthread_create(&thread, NULL, thread_main, NULL) == 0);
-    assert(pthread_join(thread, NULL) == 0);
+    int result = pthread_create(&thread, NULL, thread_main, NULL);
+    assert(result == 0);
+    result = pthread_join(thread, NULL);
+    assert(result == 0);
 
     struct s3e_user_mem_mgr actual;
     assert(s3eMemoryGetUserMemMgr(&actual) == 0);
@@ -120,10 +122,38 @@ static void test_user_manager_validation_and_reset(void) {
     assert(s3eMemoryGetUserMemMgr(NULL) == 1);
 }
 
+static void *heap_thread_main(void *opaque) {
+    void **address = opaque;
+    int32_t result = s3eMemoryHeapCreate(1);
+    assert(result == 0);
+    *address = s3eMemoryHeapAddress(1);
+    assert(*address);
+    return NULL;
+}
+
+static void test_heap_access_is_serialized(void) {
+    enum { THREAD_COUNT = 4 };
+    pthread_t threads[THREAD_COUNT];
+    void *addresses[THREAD_COUNT] = {0};
+
+    for (size_t i = 0; i < THREAD_COUNT; ++i) {
+        int result = pthread_create(&threads[i], NULL, heap_thread_main, &addresses[i]);
+        assert(result == 0);
+    }
+    for (size_t i = 0; i < THREAD_COUNT; ++i) {
+        int result = pthread_join(threads[i], NULL);
+        assert(result == 0);
+        assert(addresses[i] == addresses[0]);
+    }
+    assert(s3eMemoryHeapDestroy(1) == 0);
+}
+
 int main(void) {
     test_base_allocator_bypasses_user_manager();
     test_user_manager_is_thread_local();
     test_user_manager_validation_and_reset();
+    test_heap_access_is_serialized();
+    s3e_memory_shutdown();
     puts("s3e memory tests passed");
     return 0;
 }

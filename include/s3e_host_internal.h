@@ -100,6 +100,7 @@ struct memory_file {
 
 struct timer_event {
     uint64_t due_ms;
+    uint64_t sequence;
     void *callback;
     void *user_data;
     struct timer_event *next;
@@ -253,6 +254,8 @@ struct s3e_inet_address {
 
 _Static_assert(offsetof(struct s3e_inet_address, ip_address) == 0x88,
                "s3eInetAddress IPv4 offset changed");
+_Static_assert(offsetof(struct s3e_inet_address, ipv6_address) == 0x8c,
+               "s3eInetAddress IPv6 offset changed");
 _Static_assert(offsetof(struct s3e_inet_address, port) == 0x9c,
                "s3eInetAddress port offset changed");
 _Static_assert(offsetof(struct s3e_inet_address, next) == 0x120,
@@ -311,10 +314,6 @@ extern struct dtrz_index g_dtrz;
 extern struct memory_file *g_memory_files;
 extern struct timer_event *g_timers;
 extern pthread_mutex_t g_timer_mutex;
-extern int g_memory_error;
-extern __thread struct s3e_user_mem_mgr g_user_mem_mgr;
-extern __thread int g_user_mem_mgr_set;
-extern struct s3e_heap g_heaps[8];
 extern struct fbdev_window g_native_window;
 extern struct surface_geometry g_surface;
 extern uint32_t *g_surface_pixels;
@@ -354,9 +353,13 @@ void s3e_socket_pump(void);
 void s3e_socket_shutdown(void);
 bool s3e_multiplayer_server_enabled(void);
 bool s3e_multiplayer_proxy_enabled(void);
+/* The configured-server result is borrowed and remains valid until the config is reloaded. */
 const char *s3e_multiplayer_resolve_hostname(const char *hostname);
+void s3e_memory_shutdown(void);
 void s3e_zero_conf_pump(void);
 void s3e_zero_conf_shutdown(void);
+void s3e_zero_conf_process_packet(const uint8_t *packet, size_t packet_size,
+                                  const struct sockaddr_in *source);
 void *make_stub(const char *symbol);
 
 void *s3eMallocBase(uint32_t size, const char *file, int line);
@@ -500,26 +503,28 @@ void *s3eSocketCreate(uint32_t type, int32_t domain);
 int32_t s3eSocketClose(void *socket);
 int32_t s3eSocketBind(void *socket, const struct s3e_inet_address *address, uint8_t reuse_address);
 int32_t s3eSocketListen(void *socket, uint16_t backlog);
-void *s3eSocketAccept(void *socket, struct s3e_inet_address *address, void *callback,
-                      void *user_data);
-int32_t s3eSocketConnect(void *socket, const struct s3e_inet_address *address, void *callback,
-                         void *user_data);
+void *s3eSocketAccept(void *socket, struct s3e_inet_address *address,
+                      s3e_socket_callback_fn callback, void *user_data);
+int32_t s3eSocketConnect(void *socket, const struct s3e_inet_address *address,
+                         s3e_socket_callback_fn callback, void *user_data);
 int32_t s3eSocketSend(void *socket, const char *buffer, uint32_t length, int32_t flags);
 int32_t s3eSocketSendTo(void *socket, const char *buffer, uint32_t length, int32_t flags,
                         const struct s3e_inet_address *address);
 int32_t s3eSocketRecv(void *socket, char *buffer, uint32_t length, int32_t flags);
 int32_t s3eSocketRecvFrom(void *socket, char *buffer, uint32_t length, int32_t flags,
                           struct s3e_inet_address *address);
-int32_t s3eSocketReadable(void *socket, void *callback, void *user_data);
-int32_t s3eSocketWritable(void *socket, void *callback, void *user_data);
+int32_t s3eSocketReadable(void *socket, s3e_socket_callback_fn callback, void *user_data);
+int32_t s3eSocketWritable(void *socket, s3e_socket_callback_fn callback, void *user_data);
 int32_t s3eSocketGetInt(uint32_t key);
 int32_t s3eSocketGetError(void);
 const char *s3eSocketGetString(uint32_t key);
 int32_t s3eSocketGetLocalName(void *socket, struct s3e_inet_address *address);
 int32_t s3eSocketGetPeerName(void *socket, struct s3e_inet_address *address);
 
-void *s3eZeroConfStartSearch(const char *service_type, const char *domain, void *found_callback,
-                             void *update_callback, void *lost_callback, void *user_data);
+void *s3eZeroConfStartSearch(const char *service_type, const char *domain,
+                             s3e_zeroconf_callback_fn found_callback,
+                             s3e_zeroconf_callback_fn update_callback,
+                             s3e_zeroconf_callback_fn lost_callback, void *user_data);
 void s3eZeroConfStopSearch(void *search);
 void *s3eZeroConfPublish(uint16_t port, const char *name, const char *service_type,
                          const char *domain, uint16_t txt_count, const char **txt_records);

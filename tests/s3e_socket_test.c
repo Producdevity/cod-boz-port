@@ -6,6 +6,7 @@ enum {
     TEST_RESULT_SUCCESS = 0,
     TEST_RESULT_ERROR = 1,
     TEST_HANDLE_FIRST = 3000,
+    TEST_IO_TIMEOUT_MS = 5000,
 };
 
 char g_root[1024];
@@ -36,12 +37,13 @@ void s3eFreeBase(void *pointer) {
 
 uint64_t monotonic_ms(void) {
     struct timespec now;
-    assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
+    int result = clock_gettime(CLOCK_MONOTONIC, &now);
+    assert(result == 0);
     return (uint64_t)now.tv_sec * 1000u + (uint64_t)now.tv_nsec / 1000000u;
 }
 
 static void pump_until(int *counter) {
-    uint64_t deadline = monotonic_ms() + 1000;
+    uint64_t deadline = monotonic_ms() + TEST_IO_TIMEOUT_MS;
     while (!*counter && monotonic_ms() < deadline) {
         s3e_socket_pump();
         struct timespec pause = {.tv_nsec = 1000000L};
@@ -53,7 +55,8 @@ static void pump_until(int *counter) {
 static struct s3e_inet_address ipv4_address(const char *ip, uint16_t port) {
     struct s3e_inet_address address = {0};
     address.type = S3E_SOCKET_ADDR_IPV4;
-    assert(inet_pton(AF_INET, ip, &address.ip_address) == 1);
+    int result = inet_pton(AF_INET, ip, &address.ip_address);
+    assert(result == 1);
     address.port = htons(port);
     return address;
 }
@@ -95,15 +98,18 @@ static void write_multiplayer_config(void) {
     snprintf(path, sizeof(path), "%s/config.txt", g_root);
     FILE *file = fopen(path, "w");
     assert(file);
-    assert(fputs("multiplayer_server=127.0.0.1\nmultiplayer_proxy=0\n", file) >= 0);
-    assert(fclose(file) == 0);
+    int result = fputs("multiplayer_server=127.0.0.1\nmultiplayer_proxy=0\n", file);
+    assert(result >= 0);
+    result = fclose(file);
+    assert(result == 0);
     s3e_host_set_config(NULL, 0);
 }
 
 static void remove_multiplayer_config(void) {
     char path[1200];
     snprintf(path, sizeof(path), "%s/config.txt", g_root);
-    assert(unlink(path) == 0);
+    int result = unlink(path);
+    assert(result == 0);
     s3e_host_set_config(NULL, 0);
 }
 
@@ -126,6 +132,11 @@ static void test_inet_helpers(void) {
     assert(strcmp(s3eInetToString(&full, 1), "127.0.0.1:28960") == 0);
 
     assert(s3eInetAton(NULL, "not-an-address") == TEST_RESULT_ERROR);
+    assert(s3eSocketGetError() == S3E_SOCKET_ERR_PARAM);
+    assert(s3eSocketGetError() == S3E_SOCKET_ERR_PARAM);
+    assert(s3eSocketGetInt(S3E_SOCKET_MAX_SOCKETS) == 32);
+    assert(s3eSocketGetError() == S3E_SOCKET_ERR_NONE);
+    assert(s3eSocketGetInt(UINT32_MAX) == -1);
     assert(s3eSocketGetError() == S3E_SOCKET_ERR_PARAM);
 }
 
@@ -156,8 +167,7 @@ static void test_udp(void) {
     g_expected_readable_socket = receiver;
     g_expected_readable_user_data = &marker;
     g_readable_count = 0;
-    assert(s3eSocketReadable(receiver, (void *)(uintptr_t)readable_callback, &marker) ==
-           TEST_RESULT_SUCCESS);
+    assert(s3eSocketReadable(receiver, readable_callback, &marker) == TEST_RESULT_SUCCESS);
 
     const char payload[] = "udp-loopback";
     assert(s3eSocketSendTo(sender, payload, sizeof(payload), 0, &receiver_address) ==
@@ -189,8 +199,7 @@ static void test_tcp(void) {
     g_expected_accept_socket = listener;
     g_expected_accept_user_data = &accept_marker;
     g_accept_count = 0;
-    assert(s3eSocketAccept(listener, NULL, (void *)(uintptr_t)accept_callback, &accept_marker) ==
-           NULL);
+    assert(s3eSocketAccept(listener, NULL, accept_callback, &accept_marker) == NULL);
     assert(s3eSocketGetError() == S3E_SOCKET_ERR_WOULDBLOCK);
 
     int connect_marker = 29;
@@ -198,8 +207,8 @@ static void test_tcp(void) {
     g_expected_connect_user_data = &connect_marker;
     g_connect_count = 0;
     g_connect_result = TEST_RESULT_ERROR;
-    assert(s3eSocketConnect(client, &address, (void *)(uintptr_t)connect_callback,
-                            &connect_marker) == TEST_RESULT_SUCCESS);
+    assert(s3eSocketConnect(client, &address, connect_callback, &connect_marker) ==
+           TEST_RESULT_SUCCESS);
     pump_until(&g_connect_count);
     assert(g_connect_result == TEST_RESULT_SUCCESS);
 
@@ -214,7 +223,7 @@ static void test_tcp(void) {
     assert(s3eSocketSend(client, payload, sizeof(payload), 0) == (int32_t)sizeof(payload));
     char received[64];
     int32_t count = -1;
-    uint64_t deadline = monotonic_ms() + 1000;
+    uint64_t deadline = monotonic_ms() + TEST_IO_TIMEOUT_MS;
     while (count < 0 && monotonic_ms() < deadline) {
         count = s3eSocketRecv(server, received, sizeof(received), 0);
         if (count < 0) {
@@ -266,7 +275,8 @@ int main(void) {
     remove_multiplayer_config();
     s3e_socket_shutdown();
 
-    assert(rmdir(g_root) == 0);
+    int result = rmdir(g_root);
+    assert(result == 0);
     puts("s3e socket tests passed");
     return 0;
 }

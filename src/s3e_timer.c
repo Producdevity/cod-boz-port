@@ -6,6 +6,8 @@ enum {
     S3E_TIMER_MAX_EVENTS = 32,
 };
 
+static uint64_t g_timer_sequence;
+
 static uint64_t timer_elapsed_ms(void) {
     uint64_t now = monotonic_us();
     if (!g_host_start_us || now < g_host_start_us) {
@@ -50,10 +52,13 @@ int32_t s3eTimerGetInt(uint32_t key) {
 
 void dispatch_due_timers(void) {
     uint64_t now = monotonic_ms();
+    pthread_mutex_lock(&g_timer_mutex);
+    uint64_t sequence_limit = g_timer_sequence;
+    pthread_mutex_unlock(&g_timer_mutex);
     while (1) {
         pthread_mutex_lock(&g_timer_mutex);
         struct timer_event *timer = g_timers;
-        if (!timer || timer->due_ms > now) {
+        if (!timer || timer->due_ms > now || timer->sequence > sequence_limit) {
             pthread_mutex_unlock(&g_timer_mutex);
             break;
         }
@@ -88,6 +93,10 @@ int32_t s3eTimerSetTimer(uint32_t period_ms, void *callback, void *user_data) {
     }
 
     timer->due_ms = monotonic_ms() + period_ms;
+    timer->sequence = ++g_timer_sequence;
+    if (!timer->sequence) {
+        timer->sequence = ++g_timer_sequence;
+    }
     timer->callback = callback;
     timer->user_data = user_data;
 
@@ -125,6 +134,7 @@ int64_t s3eTimerGetLocaltimeOffset(const uint64_t *utc_ms) {
     struct tm utc_tm;
     localtime_r(&now, &local_tm);
     gmtime_r(&now, &utc_tm);
+    utc_tm.tm_isdst = local_tm.tm_isdst;
     time_t local = mktime(&local_tm);
     time_t utc = mktime(&utc_tm);
     return (int64_t)difftime(local, utc) * 1000;

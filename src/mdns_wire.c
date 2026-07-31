@@ -492,19 +492,19 @@ enum mdns_wire_status mdns_wire_parse_packet(const uint8_t *data, size_t data_si
         return status;
     }
 
-    size_t record_count = (size_t)packet->declared_answer_count + packet->declared_authority_count +
-                          packet->declared_additional_count;
-    if (packet->declared_question_count > MDNS_WIRE_MAX_QUESTIONS ||
-        record_count > MDNS_WIRE_MAX_RECORDS) {
-        return MDNS_WIRE_LIMIT_EXCEEDED;
-    }
-
     for (size_t i = 0; i < packet->declared_question_count; ++i) {
-        status = parse_question(data, data_size, &offset, &packet->questions[i]);
+        struct mdns_wire_question discarded;
+        struct mdns_wire_question *question = packet->question_count < MDNS_WIRE_MAX_QUESTIONS
+                                                  ? &packet->questions[packet->question_count]
+                                                  : &discarded;
+        memset(question, 0, sizeof(*question));
+        status = parse_question(data, data_size, &offset, question);
         if (status != MDNS_WIRE_OK) {
             return status;
         }
-        ++packet->question_count;
+        if (packet->question_count < MDNS_WIRE_MAX_QUESTIONS) {
+            ++packet->question_count;
+        }
     }
 
     const uint16_t section_counts[] = {
@@ -515,12 +515,19 @@ enum mdns_wire_status mdns_wire_parse_packet(const uint8_t *data, size_t data_si
     for (size_t section = 0; section < sizeof(section_counts) / sizeof(section_counts[0]);
          ++section) {
         for (size_t i = 0; i < section_counts[section]; ++i) {
-            status = parse_record(data, data_size, &offset, (enum mdns_wire_section)section,
-                                  &packet->records[packet->record_count]);
+            struct mdns_wire_record discarded;
+            struct mdns_wire_record *record = packet->record_count < MDNS_WIRE_MAX_RECORDS
+                                                  ? &packet->records[packet->record_count]
+                                                  : &discarded;
+            memset(record, 0, sizeof(*record));
+            status =
+                parse_record(data, data_size, &offset, (enum mdns_wire_section)section, record);
             if (status != MDNS_WIRE_OK) {
                 return status;
             }
-            ++packet->record_count;
+            if (packet->record_count < MDNS_WIRE_MAX_RECORDS) {
+                ++packet->record_count;
+            }
         }
     }
     return MDNS_WIRE_OK;

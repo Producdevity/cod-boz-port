@@ -7,7 +7,10 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 
-enum { MDNS_PORT = 5353 };
+enum {
+    MDNS_PORT = 5353,
+    MDNS_MULTICAST_ADDRESS = 0xe00000fbu,
+};
 
 uint64_t zeroconf_platform_now_ms(void) {
     return monotonic_ms();
@@ -24,8 +27,8 @@ int zeroconf_platform_select_ipv4(struct in_addr *selected) {
     int found = 0;
     for (const struct ifaddrs *item = interfaces; item; item = item->ifa_next) {
         if (!item->ifa_addr || item->ifa_addr->sa_family != AF_INET ||
-            !(item->ifa_flags & IFF_UP) || !(item->ifa_flags & IFF_MULTICAST) ||
-            (item->ifa_flags & IFF_LOOPBACK)) {
+            !(item->ifa_flags & IFF_UP) || !(item->ifa_flags & IFF_RUNNING) ||
+            !(item->ifa_flags & IFF_MULTICAST) || (item->ifa_flags & IFF_LOOPBACK)) {
             continue;
         }
         const struct sockaddr_in *candidate = (const struct sockaddr_in *)item->ifa_addr;
@@ -50,7 +53,7 @@ static int configure_socket(int socket_fd, struct in_addr interface_address) {
         .sin_addr.s_addr = htonl(INADDR_ANY),
     };
     struct ip_mreq multicast = {
-        .imr_multiaddr.s_addr = htonl(0xe00000fbu),
+        .imr_multiaddr.s_addr = htonl(MDNS_MULTICAST_ADDRESS),
         .imr_interface = interface_address,
     };
 
@@ -98,7 +101,7 @@ int zeroconf_platform_send(int socket_fd, const uint8_t *packet, size_t packet_s
     struct sockaddr_in multicast = {
         .sin_family = AF_INET,
         .sin_port = htons(MDNS_PORT),
-        .sin_addr.s_addr = htonl(0xe00000fbu),
+        .sin_addr.s_addr = htonl(MDNS_MULTICAST_ADDRESS),
     };
     const struct sockaddr_in *target = destination ? destination : &multicast;
     return sendto(socket_fd, packet, packet_size, MSG_NOSIGNAL, (const struct sockaddr *)target,

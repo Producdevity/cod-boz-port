@@ -1,9 +1,10 @@
 #include "s3e_host_internal.h"
 
-int g_memory_error;
-__thread struct s3e_user_mem_mgr g_user_mem_mgr;
-__thread int g_user_mem_mgr_set;
-struct s3e_heap g_heaps[8];
+static _Thread_local int g_memory_error;
+static _Thread_local struct s3e_user_mem_mgr g_user_mem_mgr;
+static _Thread_local int g_user_mem_mgr_set;
+static struct s3e_heap g_heaps[8];
+static pthread_mutex_t g_heap_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static struct s3e_user_mem_mgr default_user_mem_mgr(void) {
     return (struct s3e_user_mem_mgr){
@@ -69,11 +70,7 @@ int32_t s3eMemoryGetUserMemMgr(void *out) {
     return 0;
 }
 
-int32_t s3eMemoryHeapCreate(uint32_t heap_index) {
-    if (heap_index >= sizeof(g_heaps) / sizeof(g_heaps[0])) {
-        g_memory_error = EINVAL;
-        return 1;
-    }
+static int32_t heap_create_locked(uint32_t heap_index) {
     if (!g_heaps[heap_index].base) {
         uint32_t size = heap_index == 0 ? 128u * 1024u * 1024u : 16u * 1024u * 1024u;
         g_heaps[heap_index].base = calloc(1, size);
@@ -86,14 +83,26 @@ int32_t s3eMemoryHeapCreate(uint32_t heap_index) {
     return 0;
 }
 
+int32_t s3eMemoryHeapCreate(uint32_t heap_index) {
+    if (heap_index >= sizeof(g_heaps) / sizeof(g_heaps[0])) {
+        g_memory_error = EINVAL;
+        return 1;
+    }
+    pthread_mutex_lock(&g_heap_mutex);
+    int32_t result = heap_create_locked(heap_index);
+    pthread_mutex_unlock(&g_heap_mutex);
+    return result;
+}
+
 int32_t s3eMemoryHeapDestroy(uint32_t heap_index) {
     if (heap_index >= sizeof(g_heaps) / sizeof(g_heaps[0])) {
         g_memory_error = EINVAL;
         return 1;
     }
+    pthread_mutex_lock(&g_heap_mutex);
     free(g_heaps[heap_index].base);
-    g_heaps[heap_index].base = NULL;
-    g_heaps[heap_index].size = 0;
+    memset(&g_heaps[heap_index], 0, sizeof(g_heaps[heap_index]));
+    pthread_mutex_unlock(&g_heap_mutex);
     return 0;
 }
 
@@ -102,10 +111,10 @@ void *s3eMemoryHeapAddress(uint32_t heap_index) {
         g_memory_error = EINVAL;
         return NULL;
     }
-    if (!g_heaps[heap_index].base && s3eMemoryHeapCreate(heap_index) != 0) {
-        return NULL;
-    }
-    return g_heaps[heap_index].base;
+    pthread_mutex_lock(&g_heap_mutex);
+    void *address = heap_create_locked(heap_index) == 0 ? g_heaps[heap_index].base : NULL;
+    pthread_mutex_unlock(&g_heap_mutex);
+    return address;
 }
 
 int32_t s3eMemoryGetError(void) {
@@ -114,4 +123,13 @@ int32_t s3eMemoryGetError(void) {
 
 const char *s3eMemoryGetErrorString(void) {
     return strerror(g_memory_error);
+}
+
+void s3e_memory_shutdown(void) {
+    pthread_mutex_lock(&g_heap_mutex);
+    for (size_t i = 0; i < sizeof(g_heaps) / sizeof(g_heaps[0]); ++i) {
+        free(g_heaps[i].base);
+        memset(&g_heaps[i], 0, sizeof(g_heaps[i]));
+    }
+    pthread_mutex_unlock(&g_heap_mutex);
 }

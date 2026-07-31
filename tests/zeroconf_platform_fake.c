@@ -3,6 +3,7 @@
 #include "zeroconf_platform_fake.h"
 
 #include <arpa/inet.h>
+#include <errno.h>
 #include <string.h>
 
 enum {
@@ -55,6 +56,7 @@ ssize_t zeroconf_platform_receive(int socket_fd, uint8_t *packet, size_t capacit
     (void)packet;
     (void)capacity;
     (void)source;
+    errno = EAGAIN;
     return -1;
 }
 

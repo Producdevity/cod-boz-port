@@ -19,13 +19,13 @@ struct socket_slot {
     uint32_t generation;
     int32_t type;
     int32_t domain;
-    void *connect_callback;
+    s3e_socket_callback_fn connect_callback;
     void *connect_user_data;
-    void *accept_callback;
+    s3e_socket_callback_fn accept_callback;
     void *accept_user_data;
-    void *readable_callback;
+    s3e_socket_callback_fn readable_callback;
     void *readable_user_data;
-    void *writable_callback;
+    s3e_socket_callback_fn writable_callback;
     void *writable_user_data;
     int in_use;
     int connect_pending;
@@ -49,12 +49,15 @@ struct dns_lookup {
     int gai_error;
     int done;
     int cancelled;
+    int detached;
 };
 
 static struct socket_slot g_socket_slots[S3E_SOCKET_SLOT_COUNT];
 static _Thread_local int32_t g_socket_error;
 static pthread_mutex_t g_dns_mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct dns_lookup *g_dns_lookup;
+
+static void free_dns_lookup(struct dns_lookup *lookup);
 
 static void set_socket_error(int32_t error) {
     g_socket_error = error;
@@ -327,7 +330,11 @@ static void *dns_lookup_thread(void *opaque) {
         lookup->result_length = result_length;
     }
     lookup->done = 1;
+    int detached = lookup->detached;
     pthread_mutex_unlock(&g_dns_mutex);
+    if (detached) {
+        free_dns_lookup(lookup);
+    }
     return NULL;
 }
 
@@ -586,8 +593,8 @@ int32_t s3eSocketListen(void *socket_handle_value, uint16_t backlog) {
     return S3E_RESULT_SUCCESS;
 }
 
-void *s3eSocketAccept(void *socket_handle_value, struct s3e_inet_address *address, void *callback,
-                      void *user_data) {
+void *s3eSocketAccept(void *socket_handle_value, struct s3e_inet_address *address,
+                      s3e_socket_callback_fn callback, void *user_data) {
     struct socket_slot *slot = resolve_socket(socket_handle_value);
     if (!slot) {
         return NULL;
@@ -628,7 +635,7 @@ void *s3eSocketAccept(void *socket_handle_value, struct s3e_inet_address *addres
 }
 
 int32_t s3eSocketConnect(void *socket_handle_value, const struct s3e_inet_address *address,
-                         void *callback, void *user_data) {
+                         s3e_socket_callback_fn callback, void *user_data) {
     struct socket_slot *slot = resolve_socket(socket_handle_value);
     if (!slot) {
         return S3E_RESULT_ERROR;
@@ -746,7 +753,8 @@ int32_t s3eSocketRecvFrom(void *socket_handle_value, char *buffer, uint32_t leng
     return (int32_t)received;
 }
 
-int32_t s3eSocketReadable(void *socket_handle_value, void *callback, void *user_data) {
+int32_t s3eSocketReadable(void *socket_handle_value, s3e_socket_callback_fn callback,
+                          void *user_data) {
     struct socket_slot *slot = resolve_socket(socket_handle_value);
     if (!slot) {
         return S3E_RESULT_ERROR;
@@ -759,7 +767,8 @@ int32_t s3eSocketReadable(void *socket_handle_value, void *callback, void *user_
     return S3E_RESULT_SUCCESS;
 }
 
-int32_t s3eSocketWritable(void *socket_handle_value, void *callback, void *user_data) {
+int32_t s3eSocketWritable(void *socket_handle_value, s3e_socket_callback_fn callback,
+                          void *user_data) {
     struct socket_slot *slot = resolve_socket(socket_handle_value);
     if (!slot) {
         return S3E_RESULT_ERROR;
@@ -771,24 +780,28 @@ int32_t s3eSocketWritable(void *socket_handle_value, void *callback, void *user_
 }
 
 int32_t s3eSocketGetInt(uint32_t key) {
+    int32_t value;
     switch (key) {
     case S3E_SOCKET_MAX_SOCKETS:
-        return S3E_SOCKET_SLOT_COUNT;
+        value = S3E_SOCKET_SLOT_COUNT;
+        break;
     case S3E_SOCKET_NETWORK_AVAILABLE:
     case S3E_SOCKET_UDP_AVAILABLE:
-        return 1;
+        value = 1;
+        break;
     case S3E_SOCKET_NETWORK_TYPE:
-        return S3E_NETWORK_TYPE_WLAN;
+        value = S3E_NETWORK_TYPE_WLAN;
+        break;
     default:
         set_socket_error(S3E_SOCKET_ERR_PARAM);
         return -1;
     }
+    set_socket_error(S3E_SOCKET_ERR_NONE);
+    return value;
 }
 
 int32_t s3eSocketGetError(void) {
-    int32_t error = g_socket_error;
-    g_socket_error = S3E_SOCKET_ERR_NONE;
-    return error;
+    return g_socket_error;
 }
 
 const char *s3eSocketGetString(uint32_t key) {
@@ -851,10 +864,10 @@ static int slot_matches(uint32_t index, uint32_t generation) {
            g_socket_slots[index].generation == generation;
 }
 
-static void invoke_socket_callback(void *callback, void *socket, void *system_data,
+static void invoke_socket_callback(s3e_socket_callback_fn callback, void *socket, void *system_data,
                                    void *user_data) {
     if (callback) {
-        ((s3e_socket_callback_fn)(uintptr_t)callback)(socket, system_data, user_data);
+        callback(socket, system_data, user_data);
     }
 }
 
@@ -873,7 +886,7 @@ static void dispatch_socket_event(const struct socket_poll_entry *entry) {
         if (getsockopt(slot->fd, SOL_SOCKET, SO_ERROR, &native_error, &error_length) < 0) {
             native_error = errno;
         }
-        void *callback = slot->connect_callback;
+        s3e_socket_callback_fn callback = slot->connect_callback;
         void *user_data = slot->connect_user_data;
         slot->connect_pending = 0;
         slot->connect_callback = NULL;
@@ -888,7 +901,7 @@ static void dispatch_socket_event(const struct socket_poll_entry *entry) {
     }
 
     if (slot->accept_callback && (events & (POLLIN | POLLERR | POLLHUP | POLLNVAL))) {
-        void *callback = slot->accept_callback;
+        s3e_socket_callback_fn callback = slot->accept_callback;
         void *user_data = slot->accept_user_data;
         slot->accept_callback = NULL;
         slot->accept_user_data = NULL;
@@ -901,7 +914,7 @@ static void dispatch_socket_event(const struct socket_poll_entry *entry) {
     }
 
     if (slot->readable_callback && (events & (POLLIN | POLLERR | POLLHUP | POLLNVAL))) {
-        void *callback = slot->readable_callback;
+        s3e_socket_callback_fn callback = slot->readable_callback;
         void *user_data = slot->readable_user_data;
         slot->readable_callback = NULL;
         slot->readable_user_data = NULL;
@@ -914,7 +927,7 @@ static void dispatch_socket_event(const struct socket_poll_entry *entry) {
     }
 
     if (slot->writable_callback && (events & (POLLOUT | POLLERR | POLLHUP | POLLNVAL))) {
-        void *callback = slot->writable_callback;
+        s3e_socket_callback_fn callback = slot->writable_callback;
         void *user_data = slot->writable_user_data;
         slot->writable_callback = NULL;
         slot->writable_user_data = NULL;
@@ -982,6 +995,11 @@ void s3e_socket_shutdown(void) {
     if (lookup) {
         lookup->cancelled = 1;
         lookup->callback = NULL;
+        if (!lookup->done && pthread_detach(lookup->thread) == 0) {
+            lookup->detached = 1;
+            g_dns_lookup = NULL;
+            lookup = NULL;
+        }
     }
     pthread_mutex_unlock(&g_dns_mutex);
     if (lookup) {

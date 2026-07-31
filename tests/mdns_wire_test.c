@@ -241,10 +241,18 @@ static void test_packet_failures(void) {
     assert(mdns_wire_parse_packet(query, MDNS_WIRE_HEADER_SIZE - 1, &packet) ==
            MDNS_WIRE_TRUNCATED);
 
-    uint8_t too_many[MDNS_WIRE_HEADER_SIZE] = {0};
-    too_many[4] = 0;
-    too_many[5] = MDNS_WIRE_MAX_QUESTIONS + 1;
-    assert(mdns_wire_parse_packet(too_many, sizeof(too_many), &packet) == MDNS_WIRE_LIMIT_EXCEEDED);
+    uint8_t many_questions[512] = {0};
+    size_t question_size = length - MDNS_WIRE_HEADER_SIZE;
+    many_questions[5] = MDNS_WIRE_MAX_QUESTIONS + 1;
+    for (size_t i = 0; i < MDNS_WIRE_MAX_QUESTIONS + 1; ++i) {
+        memcpy(many_questions + MDNS_WIRE_HEADER_SIZE + i * question_size,
+               query + MDNS_WIRE_HEADER_SIZE, question_size);
+    }
+    size_t many_questions_size =
+        MDNS_WIRE_HEADER_SIZE + (MDNS_WIRE_MAX_QUESTIONS + 1) * question_size;
+    assert(mdns_wire_parse_packet(many_questions, many_questions_size, &packet) == MDNS_WIRE_OK);
+    assert(packet.declared_question_count == MDNS_WIRE_MAX_QUESTIONS + 1);
+    assert(packet.question_count == MDNS_WIRE_MAX_QUESTIONS);
 
     size_t tiny_length = 99;
     uint8_t tiny[8];

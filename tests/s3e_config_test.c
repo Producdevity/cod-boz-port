@@ -22,14 +22,17 @@ static void write_control_config(const char *contents) {
     snprintf(path, sizeof(path), "%s/config.txt", g_root);
     FILE *file = fopen(path, "w");
     assert(file);
-    assert(fputs(contents, file) >= 0);
-    assert(fclose(file) == 0);
+    int result = fputs(contents, file);
+    assert(result >= 0);
+    result = fclose(file);
+    assert(result == 0);
 }
 
 static void remove_control_config(void) {
     char path[1200];
     snprintf(path, sizeof(path), "%s/config.txt", g_root);
-    assert(unlink(path) == 0);
+    int result = unlink(path);
+    assert(result == 0);
 }
 
 static void assert_config_string(const char *section, const char *key, const char *expected) {
@@ -69,8 +72,7 @@ static void test_direct_multiplayer_server(void) {
                   "192.0.2.10") == 0);
     assert(strcmp(s3e_multiplayer_resolve_hostname(".demonware.net"), "192.0.2.10") == 0);
     assert(strcmp(s3e_multiplayer_resolve_hostname("example.net"), "example.net") == 0);
-    assert(strcmp(s3e_multiplayer_resolve_hostname("host.Demonware.net"), "host.Demonware.net") ==
-           0);
+    assert(strcmp(s3e_multiplayer_resolve_hostname("host.Demonware.net"), "192.0.2.10") == 0);
     assert(s3e_multiplayer_resolve_hostname(NULL) == NULL);
 
     remove_control_config();
@@ -116,7 +118,8 @@ int main(void) {
     test_invalid_values_and_proxy_flag();
     test_voice_chat_opt_in();
 
-    assert(rmdir(g_root) == 0);
+    int result = rmdir(g_root);
+    assert(result == 0);
     puts("s3e config tests passed");
     return 0;
 }

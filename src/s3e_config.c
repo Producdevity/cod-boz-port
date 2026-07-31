@@ -124,7 +124,7 @@ const char *s3e_multiplayer_resolve_hostname(const char *hostname) {
     size_t hostname_length = strlen(hostname);
     size_t suffix_length = sizeof(suffix) - 1;
     if (hostname_length >= suffix_length &&
-        strcmp(hostname + hostname_length - suffix_length, suffix) == 0) {
+        strcasecmp(hostname + hostname_length - suffix_length, suffix) == 0) {
         return g_multiplayer_server;
     }
     return hostname;

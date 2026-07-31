@@ -166,11 +166,7 @@ void s3e_host_shutdown(void) {
     close_all_memory_files();
     free(g_surface_pixels);
     g_surface_pixels = NULL;
-    for (size_t i = 0; i < sizeof(g_heaps) / sizeof(g_heaps[0]); ++i) {
-        free(g_heaps[i].base);
-        g_heaps[i].base = NULL;
-        g_heaps[i].size = 0;
-    }
+    s3e_memory_shutdown();
     for (size_t i = 0; i < g_stub_count; ++i) {
         free((void *)g_stub_names[i]);
     }
