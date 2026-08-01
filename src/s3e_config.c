@@ -37,18 +37,17 @@ static void strip_quotes(char *value) {
     }
 }
 
-static bool parse_decimal_long(const char *value, long *out) {
+static void parse_flag(const char *value, bool *out) {
     if (!value || !out || !value[0]) {
-        return false;
+        return;
     }
     char *end = NULL;
     errno = 0;
     long parsed = strtol(value, &end, 10);
     if (errno != 0 || end == value || *end != 0) {
-        return false;
+        return;
     }
-    *out = parsed;
-    return true;
+    *out = parsed != 0;
 }
 
 static void load_control_config(void) {
@@ -86,39 +85,25 @@ static void load_control_config(void) {
         if (strcmp(key, "multiplayer_server") == 0) {
             snprintf(g_multiplayer_server, sizeof(g_multiplayer_server), "%s", value);
         } else if (strcmp(key, "multiplayer_proxy") == 0) {
-            long parsed = 0;
-            if (parse_decimal_long(value, &parsed)) {
-                g_multiplayer_proxy = parsed != 0;
-            }
+            parse_flag(value, &g_multiplayer_proxy);
         } else if (strcmp(key, "voice_chat") == 0) {
-            long parsed = 0;
-            if (parse_decimal_long(value, &parsed)) {
-                g_voice_chat = parsed != 0;
-            }
+            parse_flag(value, &g_voice_chat);
         }
     }
     fclose(file);
 
-    if (g_multiplayer_server[0]) {
-        fprintf(stderr, "[multiplayer] server=%s proxy=%u\n", g_multiplayer_server,
-                g_multiplayer_proxy ? 1u : 0u);
-        if (g_multiplayer_proxy) {
-            fprintf(stderr, "[multiplayer] BZP1 proxy mode is not implemented by this loader\n");
-        }
+    if (g_multiplayer_server[0] && g_multiplayer_proxy) {
+        fprintf(stderr, "[multiplayer] proxy mode is not supported\n");
     }
 }
 
-bool s3e_multiplayer_server_enabled(void) {
+static bool multiplayer_server_enabled(void) {
     return g_multiplayer_server[0] != 0 && !g_multiplayer_proxy;
-}
-
-bool s3e_multiplayer_proxy_enabled(void) {
-    return g_multiplayer_proxy;
 }
 
 const char *s3e_multiplayer_resolve_hostname(const char *hostname) {
     static const char suffix[] = ".demonware.net";
-    if (!hostname || !s3e_multiplayer_server_enabled()) {
+    if (!hostname || !multiplayer_server_enabled()) {
         return hostname;
     }
     size_t hostname_length = strlen(hostname);
@@ -348,7 +333,7 @@ void s3e_host_set_config(const uint8_t *data, uint32_t size) {
     config_set("GAME", "LowMemoryDevice", "0");
     config_set("GAME", "GuiBucketSize", "2500000");
     config_set("GAME", "FrontendMemoryWarningLevel", "0");
-    if (s3e_multiplayer_server_enabled()) {
+    if (multiplayer_server_enabled()) {
         config_set("GAME", "OnlineAccount", "GENERIC");
         config_set("GAME", "GameVersion", "1.0.11");
     } else {

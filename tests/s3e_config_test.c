@@ -44,8 +44,6 @@ static void assert_config_string(const char *section, const char *key, const cha
 
 static void test_offline_defaults(void) {
     s3e_host_set_config((const uint8_t *)embedded_config, (uint32_t)strlen(embedded_config));
-    assert(!s3e_multiplayer_server_enabled());
-    assert(!s3e_multiplayer_proxy_enabled());
     assert_config_string("GAME", "OnlineAccount", "NONE");
     assert_config_string("GAME", "MatchmakingSearchAndPublishMode", "0");
     assert_config_string("Demonware", "AuthServer", "");
@@ -59,8 +57,6 @@ static void test_direct_multiplayer_server(void) {
                          "multiplayer_proxy=0\n");
     s3e_host_set_config((const uint8_t *)embedded_config, (uint32_t)strlen(embedded_config));
 
-    assert(s3e_multiplayer_server_enabled());
-    assert(!s3e_multiplayer_proxy_enabled());
     assert_config_string("GAME", "OnlineAccount", "GENERIC");
     assert_config_string("GAME", "GameVersion", "1.0.11");
     assert_config_string("GAME", "MatchmakingSearchAndPublishMode", "1");
@@ -79,17 +75,15 @@ static void test_direct_multiplayer_server(void) {
 }
 
 static void test_invalid_values_and_proxy_flag(void) {
-    write_control_config("multiplayer_server=\n"
+    write_control_config("multiplayer_server=direct.example\n"
                          "multiplayer_proxy=not-a-number\n");
     s3e_host_set_config((const uint8_t *)embedded_config, (uint32_t)strlen(embedded_config));
-    assert(!s3e_multiplayer_server_enabled());
-    assert(!s3e_multiplayer_proxy_enabled());
+    assert_config_string("GAME", "OnlineAccount", "GENERIC");
+    assert(strcmp(s3e_multiplayer_resolve_hostname("auth.demonware.net"), "direct.example") == 0);
 
     write_control_config("multiplayer_server=relay.example\n"
                          "multiplayer_proxy=-1\n");
     s3e_host_set_config((const uint8_t *)embedded_config, (uint32_t)strlen(embedded_config));
-    assert(!s3e_multiplayer_server_enabled());
-    assert(s3e_multiplayer_proxy_enabled());
     assert_config_string("GAME", "OnlineAccount", "NONE");
     assert(strcmp(s3e_multiplayer_resolve_hostname("auth.demonware.net"), "auth.demonware.net") ==
            0);

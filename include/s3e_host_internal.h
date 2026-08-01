@@ -351,8 +351,6 @@ void audio_unit_backend_shutdown(void);
 void dispatch_due_timers(void);
 void s3e_socket_pump(void);
 void s3e_socket_shutdown(void);
-bool s3e_multiplayer_server_enabled(void);
-bool s3e_multiplayer_proxy_enabled(void);
 /* The configured-server result is borrowed and remains valid until the config is reloaded. */
 const char *s3e_multiplayer_resolve_hostname(const char *hostname);
 void s3e_memory_shutdown(void);
