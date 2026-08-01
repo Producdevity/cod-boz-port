@@ -155,7 +155,8 @@ static void mkdirs_for_file(const char *path) {
 }
 
 static bool is_safe_asset_name(const char *name) {
-    if (strncmp(name, "assets/", 7) != 0 || name[7] == 0) {
+    size_t length = strlen(name);
+    if (length <= 7 || memcmp(name, "assets/", 7) != 0) {
         return false;
     }
     if (name[0] == '/' || strstr(name, "../") || strstr(name, "/..") || strstr(name, "//")) {

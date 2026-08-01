@@ -379,16 +379,19 @@ static int copy_file(const char *src, const char *dst) {
         return 0;
     }
     uint8_t buffer[8192];
-    size_t got;
     int ok = 1;
-    while ((got = fread(buffer, 1, sizeof(buffer), in)) > 0) {
-        if (fwrite(buffer, 1, got, out) != got) {
+    for (;;) {
+        size_t got = fread(buffer, 1, sizeof(buffer), in);
+        if (got > 0 && fwrite(buffer, 1, got, out) != got) {
             ok = 0;
             break;
         }
-    }
-    if (ferror(in)) {
-        ok = 0;
+        if (got < sizeof(buffer)) {
+            if (ferror(in)) {
+                ok = 0;
+            }
+            break;
+        }
     }
     fclose(out);
     fclose(in);

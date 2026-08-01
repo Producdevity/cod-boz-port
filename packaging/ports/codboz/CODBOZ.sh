@@ -30,10 +30,22 @@ loader="$gamedir/codboz_s3e_loader"
 setup_script="$gamedir/codboz_setup"
 s3e="$assetdir/boz.s3e.unpacked"
 savehome="$gamedir/savedata-home"
+config="$gamedir/config.txt"
+config_example="$gamedir/config.example.txt"
 
 mkdir -p "$savehome" "$apkdir" "$assetdir"
 cd "$gamedir" || exit 1
 : > "$gamedir/log.txt" && exec > >(tee "$gamedir/log.txt") 2>&1
+
+if [ ! -f "$config" ]; then
+  if [ -f "$config_example" ]; then
+    cp "$config_example" "$config"
+  else
+    printf 'multiplayer_server=\nmultiplayer_proxy=0\nvoice_chat=0\n' > "$config"
+  fi
+elif ! grep -Eq '^[[:space:]]*voice_chat[[:space:]]*=' "$config"; then
+  printf '\nvoice_chat=0\n' >> "$config"
+fi
 
 show_error() {
   echo "ERROR: $1 - $2"
@@ -48,14 +60,6 @@ show_error() {
 has_game_data() {
   [ -s "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
 }
-
-# shellcheck disable=SC2329
-on_signal() {
-  [ -n "${game_pid:-}" ] && kill -TERM "$game_pid" 2>/dev/null || true
-  pm_finish
-  exit 130
-}
-trap on_signal INT TERM HUP
 
 require_file() {
   if [ ! -f "$1" ]; then
@@ -98,15 +102,12 @@ require_file "$s3e" "Missing Game Data" "Setup did not create assets/boz.s3e.unp
 
 export HOME="$savehome"
 
-if [ "${CFW_NAME:-}" = "knulli" ] && [ -S /var/run/pipewire-0 ]; then
+if [ -S /var/run/pipewire-0 ]; then
   export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run}"
   export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-/var/run}"
 fi
 
-export LD_LIBRARY_PATH="$gamedir/libs.armhf:${LD_LIBRARY_PATH:-}"
-if [ -n "${sdl_controllerconfig:-}" ]; then
-  export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
-fi
+export SDL_GAMECONTROLLERCONFIG="${sdl_controllerconfig:-}"
 
 if [ -n "${GPTOKEYB:-}" ]; then
   $GPTOKEYB "codboz_s3e_loader" &

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check and build ARMHF package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install host checks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv shellcheck
+          python3 -m venv "$RUNNER_TEMP/clang-format"
+          "$RUNNER_TEMP/clang-format/bin/pip" install \
+            --disable-pip-version-check clang-format==21.1.8
+          echo "$RUNNER_TEMP/clang-format/bin" >> "$GITHUB_PATH"
+      - name: Run host checks
+        run: make check
+      - name: Run sanitizers
+        run: make test-host-sanitize
+      - name: Build ARMHF package
+        run: scripts/build-docker.sh
+      - name: Verify archive
+        run: unzip -t build/codboz.zip
+      - name: Upload PortMaster package
+        uses: actions/upload-artifact@v6
+        with:
+          name: codboz-portmaster
+          path: build/codboz.zip
+          if-no-files-found: error

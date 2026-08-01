@@ -2,6 +2,9 @@
 
 static struct s3e_config_entry g_config_entries[S3E_CONFIG_MAX_ENTRIES];
 static size_t g_config_entry_count;
+static char g_multiplayer_server[128];
+static bool g_multiplayer_proxy;
+static bool g_voice_chat;
 
 static char *trim(char *text) {
     while (*text && isspace((unsigned char)*text)) {
@@ -32,6 +35,84 @@ static void strip_quotes(char *value) {
         memmove(value, value + 1, len - 2);
         value[len - 2] = 0;
     }
+}
+
+static void parse_flag(const char *value, bool *out) {
+    if (!value || !out || !value[0]) {
+        return;
+    }
+    char *end = NULL;
+    errno = 0;
+    long parsed = strtol(value, &end, 10);
+    if (errno != 0 || end == value || *end != 0) {
+        return;
+    }
+    *out = parsed != 0;
+}
+
+static void load_control_config(void) {
+    g_multiplayer_server[0] = 0;
+    g_multiplayer_proxy = false;
+    g_voice_chat = false;
+
+    char path[1200];
+    snprintf(path, sizeof(path), "%s/config.txt", g_root);
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        if (errno != ENOENT) {
+            fprintf(stderr, "[multiplayer] unable to read %s: %s\n", path, strerror(errno));
+        }
+        return;
+    }
+
+    char line[512];
+    while (fgets(line, sizeof(line), file)) {
+        line[strcspn(line, "\r\n")] = 0;
+        strip_comment(line);
+        char *clean = trim(line);
+        if (!clean[0]) {
+            continue;
+        }
+        char *equals = strchr(clean, '=');
+        if (!equals) {
+            continue;
+        }
+        *equals = 0;
+        char *key = trim(clean);
+        char *value = trim(equals + 1);
+        strip_quotes(value);
+
+        if (strcmp(key, "multiplayer_server") == 0) {
+            snprintf(g_multiplayer_server, sizeof(g_multiplayer_server), "%s", value);
+        } else if (strcmp(key, "multiplayer_proxy") == 0) {
+            parse_flag(value, &g_multiplayer_proxy);
+        } else if (strcmp(key, "voice_chat") == 0) {
+            parse_flag(value, &g_voice_chat);
+        }
+    }
+    fclose(file);
+
+    if (g_multiplayer_server[0] && g_multiplayer_proxy) {
+        fprintf(stderr, "[multiplayer] proxy mode is not supported\n");
+    }
+}
+
+static bool multiplayer_server_enabled(void) {
+    return g_multiplayer_server[0] != 0 && !g_multiplayer_proxy;
+}
+
+const char *s3e_multiplayer_resolve_hostname(const char *hostname) {
+    static const char suffix[] = ".demonware.net";
+    if (!hostname || !multiplayer_server_enabled()) {
+        return hostname;
+    }
+    size_t hostname_length = strlen(hostname);
+    size_t suffix_length = sizeof(suffix) - 1;
+    if (hostname_length >= suffix_length &&
+        strcasecmp(hostname + hostname_length - suffix_length, suffix) == 0) {
+        return g_multiplayer_server;
+    }
+    return hostname;
 }
 
 static int config_find(const char *section, const char *key) {
@@ -238,26 +319,33 @@ void s3e_host_set_config(const uint8_t *data, uint32_t size) {
         }
     }
 
+    load_control_config();
+
     config_set("GX", "NumTPages", "512");
     config_set("GX", "NumTPagesNoMipMap", "256");
     config_set("GX", "NumTPageFreeRects", "8192");
     config_set("GX", "MaxTexturesPerTPage", "512");
     config_set("GAME", "ResourceDownloader", "0");
-    config_set("GAME", "OnlineAccount", "NONE");
     config_set("GAME", "EnableGC", "0");
     config_set("GAME", "EnableAndroidMarketBilling", "0");
-    config_set("GAME", "OnlineUseGameCenterMM", "0");
-    config_set("GAME", "MatchmakingSearchAndPublishMode", "0");
-    config_set("GAME", "VoiceChatEnabled", "0");
+    config_set("GAME", "VoiceChatEnabled", g_voice_chat ? "1" : "0");
     config_set("GAME", "LowEndDevice", "0");
     config_set("GAME", "LowMemoryDevice", "0");
     config_set("GAME", "GuiBucketSize", "2500000");
     config_set("GAME", "FrontendMemoryWarningLevel", "0");
-    config_set("Demonware", "OnlineAccount", "NONE");
-    config_set("Demonware", "LSGServer", "");
-    config_set("Demonware", "AuthServer", "");
-    config_set("Demonware", "STUNServer", "");
-    config_set("ONLINE", "dispatcher", "");
+    if (multiplayer_server_enabled()) {
+        config_set("GAME", "OnlineAccount", "GENERIC");
+        config_set("GAME", "GameVersion", "1.0.11");
+    } else {
+        config_set("GAME", "OnlineAccount", "NONE");
+        config_set("GAME", "OnlineUseGameCenterMM", "0");
+        config_set("GAME", "MatchmakingSearchAndPublishMode", "0");
+        config_set("Demonware", "OnlineAccount", "NONE");
+        config_set("Demonware", "LSGServer", "");
+        config_set("Demonware", "AuthServer", "");
+        config_set("Demonware", "STUNServer", "");
+        config_set("ONLINE", "dispatcher", "");
+    }
     config_set("FLASH", "FlashBucketSize", "32000000");
     config_set("FLASH", "FlashBucketHeapAnalyse", "0");
     if (root_asset_exists("blackops_etc.dz")) {

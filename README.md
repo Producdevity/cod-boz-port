@@ -45,6 +45,35 @@ This builds the ARMHF loader, builds the APK extraction helper, and stages a Por
 build/package/ports/codboz/
 ```
 
+Host checks:
+
+```sh
+make check
+make test-host-sanitize
+```
+
+## Multiplayer
+
+Local Wi-Fi works without a server. To use Play Online, edit `config.txt` in
+the port directory:
+
+```text
+multiplayer_server=server.example.org
+multiplayer_proxy=0
+voice_chat=0
+```
+
+All players must use the same server address. `multiplayer_proxy=1`, used by
+the Vita port's optional proxy mode, is not supported. The Go server lives in
+the sibling
+[`cod-boz-netplay`](https://github.com/Producdevity/cod-boz-netplay)
+repository.
+
+Voice chat defaults to off. Set `voice_chat=1` to enable it. The RG35XX H on
+muOS and RG40XX H on KNULLI did not expose an ALSA capture device during
+testing, so voice input on those systems requires a supported USB microphone
+or audio adapter.
+
 ## Deploy
 
 After building, deploy the staged package to a PortMaster device reachable over SSH:
