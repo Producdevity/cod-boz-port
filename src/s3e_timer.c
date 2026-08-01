@@ -129,8 +129,22 @@ uint64_t s3eTimerGetUTC(void) {
 }
 
 int64_t s3eTimerGetLocaltimeOffset(const uint64_t *utc_ms) {
-    time_t now = utc_ms ? (time_t)(*utc_ms / 1000u) : time(NULL);
+    time_t now;
+    if (utc_ms) {
+        uint64_t seconds = *utc_ms / 1000u;
+        now = (time_t)seconds;
+        if ((uint64_t)now != seconds) {
+            return 0;
+        }
+    } else {
+        now = time(NULL);
+        if (now == (time_t)-1) {
+            return 0;
+        }
+    }
     struct tm local_tm;
-    localtime_r(&now, &local_tm);
+    if (!localtime_r(&now, &local_tm)) {
+        return 0;
+    }
     return (int64_t)local_tm.tm_gmtoff * 1000;
 }
