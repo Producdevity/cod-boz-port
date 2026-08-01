@@ -114,7 +114,6 @@ executables=(
 )
 files=(
   "$payload/config.example.txt"
-  "$payload/libs.armhf/libSDL2_mixer-2.0.so.0"
   "$package_dir/gameinfo.xml"
   "$package_dir/cover.png"
   "$package_dir/screenshot.png"
@@ -151,8 +150,7 @@ printf 'Deploying COD BOZ to %s:%s\n' "$host" "$gamedir"
 ssh "$host" 'sh -s' -- "$gamedir" <<'REMOTE_MKDIR'
 set -e
 gamedir="$1"
-mkdir -p "$gamedir" "$gamedir/apk" "$gamedir/assets" "$gamedir/libs.armhf" \
-  "$gamedir/licenses"
+mkdir -p "$gamedir" "$gamedir/apk" "$gamedir/assets" "$gamedir/licenses"
 REMOTE_MKDIR
 
 scp "$payload/codboz_s3e_loader" "$host:$gamedir/codboz_s3e_loader.tmp"
@@ -163,8 +161,6 @@ scp "$payload/config.example.txt" "$host:$gamedir/config.example.txt.tmp"
 scp "$package_dir/gameinfo.xml" "$host:$gamedir/gameinfo.xml.tmp"
 scp "$package_dir/cover.png" "$host:$gamedir/cover.png.tmp"
 scp "$package_dir/screenshot.png" "$host:$gamedir/screenshot.png.tmp"
-scp "$payload/libs.armhf/libSDL2_mixer-2.0.so.0" \
-  "$host:$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0.tmp"
 scp "$payload/licenses/"*.txt "$host:$gamedir/licenses/"
 
 ssh "$host" 'sh -s' -- "$gamedir" "$portdir" <<'REMOTE_INSTALL'
@@ -186,14 +182,11 @@ mv "$gamedir/config.example.txt.tmp" "$gamedir/config.example.txt"
 mv "$gamedir/gameinfo.xml.tmp" "$gamedir/gameinfo.xml"
 mv "$gamedir/cover.png.tmp" "$gamedir/cover.png"
 mv "$gamedir/screenshot.png.tmp" "$gamedir/screenshot.png"
-mv "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0.tmp" \
-  "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0"
 
 chmod 755 "$gamedir/codboz_s3e_loader" "$gamedir/codboz_apk_extract" \
   "$gamedir/codboz_setup" "$portdir/CODBOZ.sh"
 chmod 644 "$gamedir/config.example.txt" "$gamedir/gameinfo.xml" "$gamedir/cover.png" \
-  "$gamedir/screenshot.png" "$gamedir/libs.armhf/libSDL2_mixer-2.0.so.0" \
-  "$gamedir/licenses/"*.txt
+  "$gamedir/screenshot.png" "$gamedir/licenses/"*.txt
 
 if [ ! -f "$gamedir/apk/game.apk" ]; then
   echo "Note: place the Android APK at $gamedir/apk/game.apk for first-launch setup." >&2

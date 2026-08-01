@@ -43,8 +43,6 @@ chmod 755 "$game_dir/codboz_s3e_loader"
 
 controller_result="$test_root/controller.txt"
 XDG_DATA_HOME="$xdg_data" \
-  CFW_NAME=knulli \
-  DEVICE_NAME=RG40XX-H \
   CONTROLLER_RESULT="$controller_result" \
   sdl_controllerconfig='custom-controller-mapping' \
   bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1

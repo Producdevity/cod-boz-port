@@ -61,17 +61,6 @@ has_game_data() {
   [ -s "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]
 }
 
-# ShellCheck 0.9 reports trap handlers as unreachable (SC2317); 0.11 uses SC2329.
-# shellcheck disable=SC2317,SC2329
-on_signal() {
-  if [ -n "${game_pid:-}" ]; then
-    kill -TERM "$game_pid" 2>/dev/null || true
-  fi
-  pm_finish
-  exit 130
-}
-trap on_signal INT TERM HUP
-
 require_file() {
   if [ ! -f "$1" ]; then
     show_error "$2" "$3"
@@ -113,17 +102,12 @@ require_file "$s3e" "Missing Game Data" "Setup did not create assets/boz.s3e.unp
 
 export HOME="$savehome"
 
-if [ "${CFW_NAME:-}" = "knulli" ] && [ -S /var/run/pipewire-0 ]; then
+if [ -S /var/run/pipewire-0 ]; then
   export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run}"
   export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-/var/run}"
 fi
 
-export LD_LIBRARY_PATH="$gamedir/libs.armhf:${LD_LIBRARY_PATH:-}"
-if [ -n "${sdl_controllerconfig:-}" ]; then
-  export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
-elif [ "${CFW_NAME:-}" = "knulli" ] && [ "${DEVICE_NAME:-}" = "RG40XX-H" ]; then
-  export SDL_GAMECONTROLLERCONFIG='19000000010000000100000000010000,Anbernic RG40XX-H Controller,a:b4,b:b3,x:b5,y:b6,leftshoulder:b7,rightshoulder:b8,lefttrigger:b13,righttrigger:b14,guide:b11,start:b10,back:b9,dpup:h0.1,dpleft:h0.8,dpright:h0.2,dpdown:h0.4,volumedown:b1,volumeup:b2,leftx:a0,lefty:a1,leftstick:b12,rightx:a2,righty:a3,rightstick:b15,platform:Linux,'
-fi
+export SDL_GAMECONTROLLERCONFIG="${sdl_controllerconfig:-}"
 
 if [ -n "${GPTOKEYB:-}" ]; then
   $GPTOKEYB "codboz_s3e_loader" &
