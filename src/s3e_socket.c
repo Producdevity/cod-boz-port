@@ -13,6 +13,9 @@ enum {
     S3E_SOCKET_SLOT_COUNT = 32,
     S3E_NETWORK_TYPE_WLAN = 3,
     S3E_SOCKET_MSG_MORE = 1,
+    STUN_HEADER_SIZE = 20,
+    STUN_BINDING_RESPONSE = 0x0101,
+    STUN_MATCHMAKING_MODE_ATTRIBUTE = 0xc0d0,
 };
 
 struct socket_slot {
@@ -57,8 +60,66 @@ static struct socket_slot g_socket_slots[S3E_SOCKET_SLOT_COUNT];
 static _Thread_local int32_t g_socket_error;
 static pthread_mutex_t g_dns_mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct dns_lookup *g_dns_lookup;
+static pthread_mutex_t g_matchmaking_mode_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int32_t g_matchmaking_mode = -1;
 
 static void free_dns_lookup(struct dns_lookup *lookup);
+
+int32_t s3e_multiplayer_take_matchmaking_mode(void) {
+    pthread_mutex_lock(&g_matchmaking_mode_mutex);
+    int32_t mode = g_matchmaking_mode;
+    g_matchmaking_mode = -1;
+    pthread_mutex_unlock(&g_matchmaking_mode_mutex);
+    return mode;
+}
+
+static uint16_t read_network_u16(const char *data) {
+    uint16_t value;
+    memcpy(&value, data, sizeof(value));
+    return ntohs(value);
+}
+
+static void write_network_u16(char *data, uint16_t value) {
+    value = htons(value);
+    memcpy(data, &value, sizeof(value));
+}
+
+static int32_t strip_matchmaking_mode(char *packet, uint32_t capacity, int32_t received) {
+    if (!packet || received < STUN_HEADER_SIZE || (uint32_t)received > capacity ||
+        read_network_u16(packet) != STUN_BINDING_RESPONSE) {
+        return received;
+    }
+    uint16_t body_size = read_network_u16(packet + 2);
+    if ((uint32_t)received != (uint32_t)STUN_HEADER_SIZE + body_size) {
+        return received;
+    }
+    uint32_t offset = STUN_HEADER_SIZE;
+    while (offset + 4 <= (uint32_t)received) {
+        uint16_t attribute_type = read_network_u16(packet + offset);
+        uint16_t value_size = read_network_u16(packet + offset + 2);
+        uint32_t padded_size = ((uint32_t)value_size + 3u) & ~3u;
+        uint32_t attribute_size = 4u + padded_size;
+        if (attribute_size > (uint32_t)received - offset) {
+            return received;
+        }
+        if (attribute_type == STUN_MATCHMAKING_MODE_ATTRIBUTE && value_size == 4 &&
+            memcmp(packet + offset + 4, "BOZ", 3) == 0) {
+            uint8_t mode = (uint8_t)packet[offset + 7];
+            if (mode <= 1) {
+                pthread_mutex_lock(&g_matchmaking_mode_mutex);
+                g_matchmaking_mode = mode;
+                pthread_mutex_unlock(&g_matchmaking_mode_mutex);
+            }
+            memmove(packet + offset, packet + offset + attribute_size,
+                    (uint32_t)received - offset - attribute_size);
+            received -= (int32_t)attribute_size;
+            write_network_u16(packet + 2, (uint16_t)(body_size - attribute_size));
+            return received;
+        }
+        offset += attribute_size;
+    }
+    return received;
+}
 
 static void set_socket_error(int32_t error) {
     g_socket_error = error;
@@ -735,6 +796,7 @@ int32_t s3eSocketRecv(void *socket_handle_value, char *buffer, uint32_t length, 
         set_socket_error(map_socket_errno(errno));
         return -1;
     }
+    received = strip_matchmaking_mode(buffer, length, (int32_t)received);
     set_socket_error(S3E_SOCKET_ERR_NONE);
     return (int32_t)received;
 }
@@ -763,6 +825,7 @@ int32_t s3eSocketRecvFrom(void *socket_handle_value, char *buffer, uint32_t leng
     if (address) {
         *address = source_address;
     }
+    received = strip_matchmaking_mode(buffer, length, (int32_t)received);
     set_socket_error(S3E_SOCKET_ERR_NONE);
     return (int32_t)received;
 }

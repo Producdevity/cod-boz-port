@@ -363,6 +363,13 @@ int32_t s3eConfigGetInt(const char *section, const char *key, int32_t *out) {
     const char *value = config_get(section, key);
     int32_t parsed = 0;
     int found = value && parse_config_int_value(value, 0, &parsed);
+    if (found && multiplayer_server_enabled() && strcasecmp(section, "GAME") == 0 &&
+        strcasecmp(key, "MatchmakingSearchAndPublishMode") == 0) {
+        int32_t server_mode = s3e_multiplayer_take_matchmaking_mode();
+        if (server_mode >= 0) {
+            parsed = server_mode;
+        }
+    }
     if (found && out) {
         *out = parsed;
     }
