@@ -180,6 +180,23 @@ static void test_udp(void) {
     assert(memcmp(received, payload, sizeof(payload)) == 0);
     assert(source.type == S3E_SOCKET_ADDR_IPV4);
 
+#if defined(__linux__) && defined(MSG_TRUNC)
+    const char oversized_payload[] = "larger-than-the-receive-buffer";
+    assert(s3eSocketSendTo(sender, oversized_payload, sizeof(oversized_payload), 0,
+                           &receiver_address) == (int32_t)sizeof(oversized_payload));
+    char truncated[4];
+    int32_t count = -1;
+    uint64_t deadline = monotonic_ms() + TEST_IO_TIMEOUT_MS;
+    while (count < 0 && monotonic_ms() < deadline) {
+        count = s3eSocketRecvFrom(receiver, truncated, sizeof(truncated), 0, NULL);
+        if (count < 0) {
+            assert(s3eSocketGetError() == S3E_SOCKET_ERR_WOULDBLOCK);
+        }
+    }
+    assert(count == (int32_t)sizeof(oversized_payload));
+    assert(memcmp(truncated, oversized_payload, sizeof(truncated)) == 0);
+#endif
+
     assert(s3eSocketClose(sender) == TEST_RESULT_SUCCESS);
     assert(s3eSocketClose(receiver) == TEST_RESULT_SUCCESS);
 }

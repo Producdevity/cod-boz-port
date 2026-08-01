@@ -12,6 +12,7 @@ enum {
     S3E_SOCKET_HANDLE_FIRST = 3000,
     S3E_SOCKET_SLOT_COUNT = 32,
     S3E_NETWORK_TYPE_WLAN = 3,
+    S3E_SOCKET_MSG_MORE = 1,
 };
 
 struct socket_slot {
@@ -664,9 +665,20 @@ int32_t s3eSocketConnect(void *socket_handle_value, const struct s3e_inet_addres
     return fail_with_errno(error);
 }
 
-static int send_flags(int32_t flags) {
-    (void)flags;
+static int message_flags(int32_t flags) {
     int native_flags = 0;
+#ifdef MSG_MORE
+    if (flags & S3E_SOCKET_MSG_MORE) {
+        native_flags |= MSG_MORE;
+    }
+#else
+    (void)flags;
+#endif
+    return native_flags;
+}
+
+static int send_flags(int32_t flags) {
+    int native_flags = message_flags(flags);
 #ifdef MSG_NOSIGNAL
     native_flags |= MSG_NOSIGNAL;
 #endif
@@ -713,13 +725,12 @@ int32_t s3eSocketSendTo(void *socket_handle_value, const char *buffer, uint32_t 
 }
 
 int32_t s3eSocketRecv(void *socket_handle_value, char *buffer, uint32_t length, int32_t flags) {
-    (void)flags;
     struct socket_slot *slot = resolve_socket(socket_handle_value);
     if (!slot || (!buffer && length)) {
         set_socket_error(S3E_SOCKET_ERR_PARAM);
         return -1;
     }
-    ssize_t received = recv(slot->fd, buffer, length, 0);
+    ssize_t received = recv(slot->fd, buffer, length, message_flags(flags));
     if (received < 0) {
         set_socket_error(map_socket_errno(errno));
         return -1;
@@ -730,7 +741,6 @@ int32_t s3eSocketRecv(void *socket_handle_value, char *buffer, uint32_t length, 
 
 int32_t s3eSocketRecvFrom(void *socket_handle_value, char *buffer, uint32_t length, int32_t flags,
                           struct s3e_inet_address *address) {
-    (void)flags;
     struct socket_slot *slot = resolve_socket(socket_handle_value);
     if (!slot || (!buffer && length)) {
         set_socket_error(S3E_SOCKET_ERR_PARAM);
@@ -738,8 +748,12 @@ int32_t s3eSocketRecvFrom(void *socket_handle_value, char *buffer, uint32_t leng
     }
     struct sockaddr_storage source;
     socklen_t source_length = sizeof(source);
-    ssize_t received =
-        recvfrom(slot->fd, buffer, length, 0, (struct sockaddr *)&source, &source_length);
+    int native_flags = message_flags(flags);
+#ifdef MSG_TRUNC
+    native_flags |= MSG_TRUNC;
+#endif
+    ssize_t received = recvfrom(slot->fd, buffer, length, native_flags, (struct sockaddr *)&source,
+                                &source_length);
     if (received < 0) {
         set_socket_error(map_socket_errno(errno));
         return -1;
