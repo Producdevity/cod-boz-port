@@ -59,6 +59,5 @@ int32_t is_audio_unit_get_interface(void *iface, uint32_t size) {
         return 1;
     }
     memcpy(iface, table, sizeof(table));
-    fprintf(stderr, "[voice] IsAudioUnit extension loaded\n");
     return 0;
 }
