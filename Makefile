@@ -14,15 +14,16 @@ PORT_SOURCE_DIR := packaging/ports/codboz
 PORT_PAYLOAD_DIR := $(PORT_PACKAGE_DIR)/codboz
 RELEASE_ARCHIVE ?= $(abspath $(BUILD_DIR)/codboz.zip)
 ARCHIVE_TIMESTAMP ?= 200001010000
-HOST_SOCKET_TEST := $(BUILD_DIR)/tests/s3e_socket_test
-HOST_CONFIG_TEST := $(BUILD_DIR)/tests/s3e_config_test
-HOST_MDNS_WIRE_TEST := $(BUILD_DIR)/tests/mdns_wire_test
-HOST_ZERO_CONF_TEST := $(BUILD_DIR)/tests/s3e_zeroconf_test
-HOST_TIMER_TEST := $(BUILD_DIR)/tests/s3e_timer_test
-HOST_MEMORY_TEST := $(BUILD_DIR)/tests/s3e_memory_test
-HOST_DEVICE_ID_TEST := $(BUILD_DIR)/tests/device_id_test
-HOST_AUDIO_TEST := $(BUILD_DIR)/tests/s3e_audio_test
-HOST_AUDIO_UNIT_TEST := $(BUILD_DIR)/tests/s3e_audio_unit_test
+HOST_TESTS := \
+  $(BUILD_DIR)/tests/s3e_socket_test \
+  $(BUILD_DIR)/tests/s3e_config_test \
+  $(BUILD_DIR)/tests/mdns_wire_test \
+  $(BUILD_DIR)/tests/s3e_zeroconf_test \
+  $(BUILD_DIR)/tests/s3e_timer_test \
+  $(BUILD_DIR)/tests/s3e_memory_test \
+  $(BUILD_DIR)/tests/device_id_test \
+  $(BUILD_DIR)/tests/s3e_audio_test \
+  $(BUILD_DIR)/tests/s3e_audio_unit_test
 CFLAGS ?= -O2 -g
 PROJECT_CPPFLAGS := -D_GNU_SOURCE -Iinclude -Ithird_party/lzma
 PROJECT_CFLAGS := -std=c11 -Wall -Wextra -Werror
@@ -118,7 +119,7 @@ zip: package
 	cd $(RELEASE_DIR) && LC_ALL=C find . -mindepth 1 -print | LC_ALL=C sort | \
 	  zip -Xq "$(RELEASE_ARCHIVE)" -@
 
-$(HOST_SOCKET_TEST): tests/s3e_socket_test.c src/s3e_socket.c src/s3e_config.c \
+$(BUILD_DIR)/tests/s3e_socket_test: tests/s3e_socket_test.c src/s3e_socket.c src/s3e_config.c \
                      include/s3e_host_internal.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) $(HOST_TEST_CFLAGS) \
@@ -126,70 +127,63 @@ $(HOST_SOCKET_TEST): tests/s3e_socket_test.c src/s3e_socket.c src/s3e_config.c \
 	  -o $@ tests/s3e_socket_test.c src/s3e_socket.c src/s3e_config.c \
 	  $(HOST_TEST_LDFLAGS)
 
-$(HOST_CONFIG_TEST): tests/s3e_config_test.c src/s3e_config.c \
+$(BUILD_DIR)/tests/s3e_config_test: tests/s3e_config_test.c src/s3e_config.c \
                      include/s3e_host_internal.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) \
 	  -o $@ tests/s3e_config_test.c src/s3e_config.c $(HOST_TEST_LDFLAGS)
 
-$(HOST_MDNS_WIRE_TEST): tests/mdns_wire_test.c src/mdns_wire.c include/mdns_wire.h | $(BUILD_DIR)
+$(BUILD_DIR)/tests/mdns_wire_test: tests/mdns_wire_test.c src/mdns_wire.c \
+                                   include/mdns_wire.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) -o $@ \
 	  tests/mdns_wire_test.c src/mdns_wire.c $(HOST_TEST_LDFLAGS)
 
-$(HOST_ZERO_CONF_TEST): tests/s3e_zeroconf_test.c tests/zeroconf_platform_fake.c \
-                        src/s3e_zeroconf.c src/mdns_wire.c include/s3e_host_internal.h \
-                        include/mdns_wire.h include/zeroconf_platform.h | $(BUILD_DIR)
+$(BUILD_DIR)/tests/s3e_zeroconf_test: tests/s3e_zeroconf_test.c \
+                                       tests/zeroconf_platform_fake.c \
+                                       src/s3e_zeroconf.c src/mdns_wire.c \
+                                       include/s3e_host_internal.h include/mdns_wire.h \
+                                       include/zeroconf_platform.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) -Itests $(HOST_TEST_CFLAGS) \
 	  $(PROJECT_CFLAGS) -o $@ tests/s3e_zeroconf_test.c \
 	  tests/zeroconf_platform_fake.c src/s3e_zeroconf.c src/mdns_wire.c \
 	  $(HOST_TEST_LDFLAGS)
 
-$(HOST_TIMER_TEST): tests/s3e_timer_test.c src/s3e_timer.c \
-                   include/s3e_host_internal.h | $(BUILD_DIR)
+$(BUILD_DIR)/tests/s3e_timer_test: tests/s3e_timer_test.c src/s3e_timer.c \
+                                    include/s3e_host_internal.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) -pthread \
 	  -o $@ tests/s3e_timer_test.c src/s3e_timer.c $(HOST_TEST_LDFLAGS)
 
-$(HOST_MEMORY_TEST): tests/s3e_memory_test.c src/s3e_memory.c \
-                    include/s3e_host_internal.h | $(BUILD_DIR)
+$(BUILD_DIR)/tests/s3e_memory_test: tests/s3e_memory_test.c src/s3e_memory.c \
+                                     include/s3e_host_internal.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) -pthread \
 	  -o $@ tests/s3e_memory_test.c src/s3e_memory.c $(HOST_TEST_LDFLAGS)
 
-$(HOST_DEVICE_ID_TEST): tests/device_id_test.c src/device_id.c \
-                       include/s3e_host_internal.h | $(BUILD_DIR)
+$(BUILD_DIR)/tests/device_id_test: tests/device_id_test.c src/device_id.c \
+                                  include/s3e_host_internal.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) -pthread \
 	  -o $@ tests/device_id_test.c src/device_id.c $(HOST_TEST_LDFLAGS)
 
-$(HOST_AUDIO_TEST): tests/s3e_audio_test.c src/s3e_audio.c \
-                   include/s3e_host_internal.h | $(BUILD_DIR)
+$(BUILD_DIR)/tests/s3e_audio_test: tests/s3e_audio_test.c src/s3e_audio.c \
+                                    include/s3e_host_internal.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) -Ddlsym=s3e_audio_test_dlsym \
 	  -Ddlclose=s3e_audio_test_dlclose $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) \
 	  -o $@ tests/s3e_audio_test.c src/s3e_audio.c $(HOST_TEST_LDFLAGS)
 
-$(HOST_AUDIO_UNIT_TEST): tests/s3e_audio_unit_test.c src/s3e_audio_unit.c \
-                        include/s3e_host_internal.h | $(BUILD_DIR)
+$(BUILD_DIR)/tests/s3e_audio_unit_test: tests/s3e_audio_unit_test.c src/s3e_audio_unit.c \
+                                         include/s3e_host_internal.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) \
 	  -o $@ tests/s3e_audio_unit_test.c src/s3e_audio_unit.c $(HOST_TEST_LDFLAGS)
 
-test-host: $(HOST_SOCKET_TEST) $(HOST_CONFIG_TEST) $(HOST_MDNS_WIRE_TEST) $(HOST_ZERO_CONF_TEST) \
-	           $(HOST_TIMER_TEST) $(HOST_MEMORY_TEST) $(HOST_DEVICE_ID_TEST) \
-	           $(HOST_AUDIO_TEST) $(HOST_AUDIO_UNIT_TEST)
-	$(HOST_SOCKET_TEST)
-	$(HOST_CONFIG_TEST)
-	$(HOST_MDNS_WIRE_TEST)
-	$(HOST_ZERO_CONF_TEST)
-	$(HOST_TIMER_TEST)
-	$(HOST_MEMORY_TEST)
-	$(HOST_DEVICE_ID_TEST)
-	$(HOST_AUDIO_TEST)
-	$(HOST_AUDIO_UNIT_TEST)
-	tests/launcher_config_test.sh
+test-host: $(HOST_TESTS)
+	@set -e; for test in $(HOST_TESTS); do "$$test"; done
+	tests/portmaster_launcher_test.sh
 
 test-host-sanitize:
 	$(MAKE) BUILD_DIR=$(BUILD_DIR)/sanitize \

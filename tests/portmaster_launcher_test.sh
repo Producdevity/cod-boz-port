@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-test_root="$(mktemp -d /tmp/codboz-launcher-config.XXXXXX)"
+test_root="$(mktemp -d /tmp/codboz-portmaster-launcher.XXXXXX)"
 trap 'rm -rf -- "$test_root"' EXIT
 
 xdg_data="$test_root/xdg"
@@ -48,4 +48,4 @@ XDG_DATA_HOME="$xdg_data" \
   bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1
 grep -qx 'custom-controller-mapping' "$controller_result"
 
-echo "launcher config tests passed"
+echo "PortMaster launcher tests passed"
