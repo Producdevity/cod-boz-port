@@ -50,9 +50,10 @@ multiplayer_proxy=0
 voice_chat=0
 ```
 
-Everyone in a match must use the same server. Leave `multiplayer_proxy=0`;
-proxy mode is not supported. Clear `multiplayer_server` to disable Play
-Online. Local Wi-Fi will continue to work.
+Everyone in a match must use the same server. Cross-play with the PS Vita port
+also works when both versions use `boz-online.xubi.org`. Leave
+`multiplayer_proxy=0`. Clear `multiplayer_server` to disable Play Online. Local
+Wi-Fi will continue to work.
 
 Set `voice_chat=1` to enable voice chat. The RG35XX H on muOS and RG40XX H on
 KNULLI did not expose an ALSA capture device during testing, so voice input on
