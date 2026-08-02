@@ -3,13 +3,6 @@
 #include <assert.h>
 
 char g_root[1024];
-static int32_t g_matchmaking_mode = -1;
-
-int32_t s3e_multiplayer_take_matchmaking_mode(void) {
-    int32_t mode = g_matchmaking_mode;
-    g_matchmaking_mode = -1;
-    return mode;
-}
 
 static const char embedded_config[] = "[Demonware]\n"
                                       "LSGServer=codboh-iphone-lobby.prod.demonware.net:3074\n"
@@ -49,12 +42,6 @@ static void assert_config_string(const char *section, const char *key, const cha
     assert(strcmp(value, expected) == 0);
 }
 
-static void assert_config_int(const char *section, const char *key, int32_t expected) {
-    int32_t value = -1;
-    assert(s3eConfigGetInt(section, key, &value) == 0);
-    assert(value == expected);
-}
-
 static void test_offline_defaults(void) {
     s3e_host_set_config((const uint8_t *)embedded_config, (uint32_t)strlen(embedded_config));
     assert_config_string("GAME", "OnlineAccount", "NONE");
@@ -83,10 +70,6 @@ static void test_direct_multiplayer_server(void) {
     assert(strcmp(s3e_multiplayer_resolve_hostname("example.net"), "example.net") == 0);
     assert(strcmp(s3e_multiplayer_resolve_hostname("host.Demonware.net"), "192.0.2.10") == 0);
     assert(s3e_multiplayer_resolve_hostname(NULL) == NULL);
-
-    g_matchmaking_mode = 0;
-    assert_config_int("GAME", "MatchmakingSearchAndPublishMode", 0);
-    assert_config_int("GAME", "MatchmakingSearchAndPublishMode", 1);
 
     remove_control_config();
 }

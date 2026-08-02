@@ -353,7 +353,6 @@ void s3e_socket_pump(void);
 void s3e_socket_shutdown(void);
 /* The configured-server result is borrowed and remains valid until the config is reloaded. */
 const char *s3e_multiplayer_resolve_hostname(const char *hostname);
-int32_t s3e_multiplayer_take_matchmaking_mode(void);
 void s3e_memory_shutdown(void);
 void s3e_zero_conf_pump(void);
 void s3e_zero_conf_shutdown(void);

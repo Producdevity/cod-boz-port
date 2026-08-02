@@ -180,25 +180,6 @@ static void test_udp(void) {
     assert(memcmp(received, payload, sizeof(payload)) == 0);
     assert(source.type == S3E_SOCKET_ADDR_IPV4);
 
-    static const unsigned char stun_response[] = {
-        0x01, 0x01, 0x00, 0x2c, 0,    0,    0,    0,    0,    0,    0,    0,    0,
-        0,    0,    0,    0,    0,    0,    0,    0x00, 0x01, 0x00, 0x08, 0x00, 0x01,
-        0xc3, 0xc5, 0xcb, 0x00, 0x71, 0x09, 0x00, 0x04, 0x00, 0x08, 0x00, 0x01, 0x0d,
-        0x96, 0xc0, 0x00, 0x02, 0x0a, 0x00, 0x05, 0x00, 0x08, 0x00, 0x01, 0x0d, 0x96,
-        0xc0, 0x00, 0x02, 0x0a, 0xc0, 0xd0, 0x00, 0x04, 'B',  'O',  'Z',  0,
-    };
-    assert(s3eSocketSendTo(sender, (const char *)stun_response, sizeof(stun_response), 0,
-                           &receiver_address) == (int32_t)sizeof(stun_response));
-    int32_t stun_count = -1;
-    uint64_t stun_deadline = monotonic_ms() + TEST_IO_TIMEOUT_MS;
-    while (stun_count < 0 && monotonic_ms() < stun_deadline) {
-        stun_count = s3eSocketRecv(receiver, received, sizeof(received), 0);
-    }
-    assert(stun_count == 56);
-    assert((unsigned char)received[2] == 0 && (unsigned char)received[3] == 36);
-    assert(s3e_multiplayer_take_matchmaking_mode() == 0);
-    assert(s3e_multiplayer_take_matchmaking_mode() == -1);
-
 #if defined(__linux__) && defined(MSG_TRUNC)
     const char oversized_payload[] = "larger-than-the-receive-buffer";
     assert(s3eSocketSendTo(sender, oversized_payload, sizeof(oversized_payload), 0,
