@@ -65,8 +65,11 @@ voice_chat=0
 
 All players must use the same server address. Cross-play with the PS Vita port
 also works when both versions use `boz-online.xubi.org`. Keep
-`multiplayer_proxy=0`. The Go server lives in the
-[`cod-boz-netplay`](https://github.com/Producdevity/cod-boz-netplay) repository.
+`multiplayer_proxy=0`, this is only relevant during development.
+
+The netplay server lives in the [`cod-boz-netplay`](https://github.com/Producdevity/cod-boz-netplay)
+repository and includes instructions for self-hosting.
+(I am probably not keeping this server up forever)
 
 Voice chat defaults to off. Set `voice_chat=1` to enable it. The devices I use
 during development do not expose ALSA capture device, so voice input on those
