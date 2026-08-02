@@ -641,10 +641,11 @@ static void input_update_game_touchpads(void) {
     int32_t width = XPERIA_TOUCHPAD_WIDTH;
     int32_t height = XPERIA_TOUCHPAD_HEIGHT;
     int32_t center_y = height / 2;
+    int32_t look_radius = width / 8;
     touchpad_update_stick(0, input_xperia_axis(SDL_AXIS_LEFTX), input_xperia_axis(SDL_AXIS_LEFTY),
                           width / 5, center_y, width / 5, height / 2);
     touchpad_update_stick(1, input_xperia_axis(SDL_AXIS_RIGHTX), input_xperia_axis(SDL_AXIS_RIGHTY),
-                          (width * 4) / 5, center_y, width / 8, height / 8);
+                          (width * 4) / 5, center_y, look_radius, look_radius);
 }
 
 void input_pump(void) {
