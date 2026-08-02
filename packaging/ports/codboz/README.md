@@ -24,18 +24,18 @@ Expected APK SHA-256:
 
 Press Select to switch between cursor mode and game mode.
 
-| Button | Action |
-|--|--|
-| Left Stick | Move |
-| Right Stick | Look |
-| D-Pad Down | Crouch / prone |
-| A | Action / sprint |
-| B | Reload |
-| X | Melee |
-| Y | Grenade |
-| L1 / L2 | Aim |
-| R1 / R2 | Fire |
-| Start | Pause |
+| Button      | Action          |
+| ----------- | --------------- |
+| Left Stick  | Move            |
+| Right Stick | Look            |
+| D-Pad Down  | Crouch / prone  |
+| A           | Action / sprint |
+| B           | Reload          |
+| X           | Melee           |
+| Y           | Grenade         |
+| L1 / L2     | Aim             |
+| R1 / R2     | Fire            |
+| Start       | Pause           |
 
 ## Multiplayer
 
@@ -55,17 +55,16 @@ also works when both versions use `boz-online.xubi.org`. Leave
 `multiplayer_proxy=0`. Clear `multiplayer_server` to disable Play Online. Local
 Wi-Fi will continue to work.
 
-Set `voice_chat=1` to enable voice chat. The RG35XX H on muOS and RG40XX H on
-KNULLI did not expose an ALSA capture device during testing, so voice input on
-those systems requires a supported USB microphone or audio adapter.
+Set `voice_chat=1` to enable voice chat if your device and CFW exposes an ALSA
+capture device. If not, you'll need a supported USB microphone or audio adapter.
 
 ## Testing
 
-| Distribution | Graphics | Hardware | Result |
-| --- | --- | --- | --- |
-| ROCKNIX | Wayland / Sway | Not tested | Not tested yet |
-| muOS | fbdev / libmali | RG35XX H, H700, 640x480 | Current package launches; online and Local Wi-Fi tested |
-| dArkOS | KMSDRM / libmali | Not tested | Not tested yet |
-| KNULLI | KMSDRM / libmali | RG40XX H, H700, 640x480 | Online and Local Wi-Fi previously tested; current package pending |
-| ArkOS | Varies by device | Not tested | Not tested yet |
-| AmberELEC | legacy libmali | Not tested | Not tested yet |
+| Distribution | Graphics         | Hardware                | Result                                                            |
+| ------------ | ---------------- | ----------------------- | ----------------------------------------------------------------- |
+| ROCKNIX      | Wayland / Sway   | Not tested              | Not tested yet                                                    |
+| muOS         | fbdev / libmali  | RG35XX H, H700, 640x480 | Current package launches; online and Local Wi-Fi tested           |
+| dArkOS       | KMSDRM / libmali | Not tested              | Not tested yet                                                    |
+| KNULLI       | KMSDRM / libmali | RG40XX H, H700, 640x480 | Online and Local Wi-Fi previously tested; current package pending |
+| ArkOS        | Varies by device | Not tested              | Not tested yet                                                    |
+| AmberELEC    | legacy libmali   | Not tested              | Not tested yet                                                    |
