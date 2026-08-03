@@ -128,13 +128,15 @@ static void test_player_name_patch(void) {
 
     struct s3e_loaded_image loaded = {.base = memory, .map_size = size};
     uint32_t name_address = 0x12345678;
+
+    memory[format_offset] = 'X';
+    assert(!codboz_override_player_name(&loaded, name_address));
+    memory[format_offset] = 'P';
+
     assert(codboz_override_player_name(&loaded, name_address));
     uint32_t patched;
     memcpy(&patched, memory + reference_offset, sizeof(patched));
     assert(patched == name_address - ((uint32_t)(uintptr_t)memory + reference_pc_offset));
-
-    memory[format_offset] = 'X';
-    assert(!codboz_override_player_name(&loaded, name_address));
     free(memory);
 }
 
