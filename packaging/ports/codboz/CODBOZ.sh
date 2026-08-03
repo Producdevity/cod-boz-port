@@ -48,7 +48,7 @@ else
     printf '\nvoice_chat=0\n' >> "$config"
   fi
   if ! grep -Eq '^[[:space:]]*player_name[[:space:]]*=' "$config"; then
-    printf 'player_name=Player\n' >> "$config"
+    printf '\nplayer_name=Player\n' >> "$config"
   fi
 fi
 
