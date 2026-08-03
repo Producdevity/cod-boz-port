@@ -67,7 +67,7 @@ All players must use the same server address. Cross-play with the PS Vita port
 also works when both versions use `boz-online.xubi.org`. Keep
 `multiplayer_proxy=0`, this is only relevant during development.
 
-The netplay server lives in the [`cod-boz-netplay`](https://github.com/Producdevity/cod-boz-netplay)
+The online server lives in the [`cod-boz-online`](https://github.com/Producdevity/cod-boz-online)
 repository and includes instructions for self-hosting.
 (I am probably not keeping this server up forever)
 
