@@ -1,3 +1,4 @@
 multiplayer_server=134.209.119.3
 multiplayer_proxy=0
 voice_chat=0
+player_name=Player

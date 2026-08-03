@@ -14,7 +14,7 @@ mkdir -p "$control_dir" "$game_dir"
 
 printf 'directory=%q\nget_controls() { :; }\npm_show_error() { :; }\npm_finish() { :; }\n' \
   "${storage#/}" > "$control_dir/control.txt"
-printf 'multiplayer_server=\nmultiplayer_proxy=0\nvoice_chat=0\n' \
+printf 'multiplayer_server=\nmultiplayer_proxy=0\nvoice_chat=0\nplayer_name=Player\n' \
   > "$game_dir/config.example.txt"
 
 if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1; then
@@ -31,6 +31,7 @@ fi
 grep -qx 'multiplayer_server=192.168.178.37' "$game_dir/config.txt"
 grep -qx 'multiplayer_proxy=0' "$game_dir/config.txt"
 test "$(grep -c '^voice_chat=0$' "$game_dir/config.txt")" -eq 1
+test "$(grep -c '^player_name=Player$' "$game_dir/config.txt")" -eq 1
 
 printf 'game-data\n' > "$game_dir/assets/boz.s3e.unpacked"
 printf 'game-data\n' > "$game_dir/assets/blackops_etc.dz"

@@ -127,11 +127,12 @@ $(BUILD_DIR)/tests/s3e_socket_test: tests/s3e_socket_test.c src/s3e_socket.c src
 	  -o $@ tests/s3e_socket_test.c src/s3e_socket.c src/s3e_config.c \
 	  $(HOST_TEST_LDFLAGS)
 
-$(BUILD_DIR)/tests/s3e_config_test: tests/s3e_config_test.c src/s3e_config.c \
+$(BUILD_DIR)/tests/s3e_config_test: tests/s3e_config_test.c src/s3e_config.c src/codboz_assets.c \
                      include/s3e_host_internal.h | $(BUILD_DIR)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(PROJECT_CPPFLAGS) $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) \
-	  -o $@ tests/s3e_config_test.c src/s3e_config.c $(HOST_TEST_LDFLAGS)
+	  -o $@ tests/s3e_config_test.c src/s3e_config.c src/codboz_assets.c \
+	  $(HOST_TEST_LDFLAGS)
 
 $(BUILD_DIR)/tests/mdns_wire_test: tests/mdns_wire_test.c src/mdns_wire.c \
                                    include/mdns_wire.h | $(BUILD_DIR)

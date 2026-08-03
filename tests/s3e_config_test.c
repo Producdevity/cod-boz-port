@@ -1,4 +1,5 @@
 #include "s3e_host_internal.h"
+#include "s3e_image.h"
 
 #include <assert.h>
 
@@ -101,6 +102,42 @@ static void test_voice_chat_opt_in(void) {
     remove_control_config();
 }
 
+static void test_player_name(void) {
+    write_control_config("player_name=Producdevity\n");
+    s3e_host_set_config((const uint8_t *)embedded_config, (uint32_t)strlen(embedded_config));
+    assert(strcmp(s3e_host_player_name(), "Producdevity") == 0);
+
+    write_control_config("player_name=too-long-player-name\n");
+    s3e_host_set_config((const uint8_t *)embedded_config, (uint32_t)strlen(embedded_config));
+    assert(strcmp(s3e_host_player_name(), "Player") == 0);
+    remove_control_config();
+}
+
+static void test_player_name_patch(void) {
+    enum {
+        reference_offset = 0x18f74c,
+        reference_pc_offset = 0x18f60a,
+        format_offset = 0x3af131,
+    };
+    size_t size = format_offset + sizeof("Player-%d");
+    uint8_t *memory = calloc(1, size);
+    assert(memory);
+    memcpy(memory + format_offset, "Player-%d", sizeof("Player-%d"));
+    uint32_t original = format_offset - reference_pc_offset;
+    memcpy(memory + reference_offset, &original, sizeof(original));
+
+    struct s3e_loaded_image loaded = {.base = memory, .map_size = size};
+    uint32_t name_address = 0x12345678;
+    assert(codboz_override_player_name(&loaded, name_address));
+    uint32_t patched;
+    memcpy(&patched, memory + reference_offset, sizeof(patched));
+    assert(patched == name_address - ((uint32_t)(uintptr_t)memory + reference_pc_offset));
+
+    memory[format_offset] = 'X';
+    assert(!codboz_override_player_name(&loaded, name_address));
+    free(memory);
+}
+
 int main(void) {
     char template[] = "/tmp/codboz-config.XXXXXX";
     char *directory = mkdtemp(template);
@@ -111,6 +148,8 @@ int main(void) {
     test_direct_multiplayer_server();
     test_invalid_values_and_proxy_flag();
     test_voice_chat_opt_in();
+    test_player_name();
+    test_player_name_patch();
 
     int result = rmdir(g_root);
     assert(result == 0);

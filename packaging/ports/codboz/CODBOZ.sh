@@ -41,10 +41,15 @@ if [ ! -f "$config" ]; then
   if [ -f "$config_example" ]; then
     cp "$config_example" "$config"
   else
-    printf 'multiplayer_server=\nmultiplayer_proxy=0\nvoice_chat=0\n' > "$config"
+    printf 'multiplayer_server=\nmultiplayer_proxy=0\nvoice_chat=0\nplayer_name=Player\n' > "$config"
   fi
-elif ! grep -Eq '^[[:space:]]*voice_chat[[:space:]]*=' "$config"; then
-  printf '\nvoice_chat=0\n' >> "$config"
+else
+  if ! grep -Eq '^[[:space:]]*voice_chat[[:space:]]*=' "$config"; then
+    printf '\nvoice_chat=0\n' >> "$config"
+  fi
+  if ! grep -Eq '^[[:space:]]*player_name[[:space:]]*=' "$config"; then
+    printf 'player_name=Player\n' >> "$config"
+  fi
 fi
 
 show_error() {

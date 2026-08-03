@@ -51,6 +51,7 @@ void s3e_image_free(struct s3e_image *image);
 bool s3e_image_parse_symbols(struct s3e_image *image);
 bool s3e_image_map_and_relocate(const struct s3e_image *image, void *(*resolve)(const char *symbol),
                                 struct s3e_loaded_image *loaded);
+bool codboz_override_player_name(struct s3e_loaded_image *loaded, uint32_t player_name_address);
 void s3e_loaded_image_unmap(struct s3e_loaded_image *loaded);
 
 #endif

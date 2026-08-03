@@ -5,6 +5,7 @@ static size_t g_config_entry_count;
 static char g_multiplayer_server[128];
 static bool g_multiplayer_proxy;
 static bool g_voice_chat;
+static char g_player_name[14];
 
 static char *trim(char *text) {
     while (*text && isspace((unsigned char)*text)) {
@@ -50,10 +51,27 @@ static void parse_flag(const char *value, bool *out) {
     *out = parsed != 0;
 }
 
+static bool valid_player_name(const char *value) {
+    size_t length = strlen(value);
+    if (length == 0 || length >= sizeof(g_player_name)) {
+        return false;
+    }
+    for (size_t i = 0; i < length; ++i) {
+        unsigned char c = (unsigned char)value[i];
+        bool letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+        bool digit = c >= '0' && c <= '9';
+        if (!letter && !digit && c != ' ' && c != '-' && c != '_' && c != '.') {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void load_control_config(void) {
     g_multiplayer_server[0] = 0;
     g_multiplayer_proxy = false;
     g_voice_chat = false;
+    snprintf(g_player_name, sizeof(g_player_name), "Player");
 
     char path[1200];
     snprintf(path, sizeof(path), "%s/config.txt", g_root);
@@ -88,6 +106,8 @@ static void load_control_config(void) {
             parse_flag(value, &g_multiplayer_proxy);
         } else if (strcmp(key, "voice_chat") == 0) {
             parse_flag(value, &g_voice_chat);
+        } else if (strcmp(key, "player_name") == 0 && valid_player_name(value)) {
+            snprintf(g_player_name, sizeof(g_player_name), "%s", value);
         }
     }
     fclose(file);
@@ -95,6 +115,10 @@ static void load_control_config(void) {
     if (g_multiplayer_server[0] && g_multiplayer_proxy) {
         fprintf(stderr, "[multiplayer] proxy mode is not supported\n");
     }
+}
+
+const char *s3e_host_player_name(void) {
+    return g_player_name;
 }
 
 static bool multiplayer_server_enabled(void) {

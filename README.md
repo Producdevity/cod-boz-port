@@ -61,6 +61,7 @@ the port directory:
 multiplayer_server=server.example.org (or IPv4)
 multiplayer_proxy=0
 voice_chat=0
+player_name=Player
 ```
 
 All players must use the same server address. Cross-play with the PS Vita port
@@ -75,6 +76,9 @@ Voice chat defaults to off. Set `voice_chat=1` to enable it. The devices I use
 during development do not expose ALSA capture device, so voice input on those
 systems requires a supported USB microphone or audio adapter.
 If you got a fancy linux-arm handheld, this should work out of the box.
+
+`player_name` accepts up to 13 letters, numbers, spaces, hyphens, underscores or
+periods.
 
 ## Deploy
 

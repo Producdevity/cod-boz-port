@@ -48,6 +48,7 @@ For Play Online, edit `ports/codboz/config.txt`:
 multiplayer_server=server.example.org
 multiplayer_proxy=0
 voice_chat=0
+player_name=Player
 ```
 
 Everyone in a match must use the same server. Cross-play with the PS Vita port
@@ -57,6 +58,9 @@ Wi-Fi will continue to work.
 
 Set `voice_chat=1` to enable voice chat if your device and CFW exposes an ALSA
 capture device. If not, you'll need a supported USB microphone or audio adapter.
+
+`player_name` accepts up to 13 letters, numbers, spaces, hyphens, underscores or
+periods.
 
 ## Testing
 
