@@ -280,6 +280,12 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    uintptr_t player_name_address = (uintptr_t)s3e_host_player_name();
+    if (player_name_address > UINT32_MAX ||
+        !codboz_override_player_name(&loaded, (uint32_t)player_name_address)) {
+        fprintf(stderr, "unable to apply configured player name\n");
+    }
+
     fprintf(stderr, "mapped S3E at %p, entry=%p\n", (void *)loaded.base,
             (void *)(loaded.base + loaded.entry_offset));
     g_loaded_base = (uintptr_t)loaded.base;
