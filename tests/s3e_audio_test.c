@@ -3,8 +3,7 @@
 #include <assert.h>
 
 enum {
-    TEST_MIXER_CHANNELS = 40,
-    TEST_SOUND_CHANNELS = 24,
+    TEST_MIXER_CHANNELS = 24,
     TEST_SOUND_END_CALLBACK = 0,
     TEST_SOUND_STOP_CALLBACK = 2,
     TEST_SOUND_STEREO_GENERATOR_CALLBACK = 3,
@@ -15,6 +14,10 @@ enum {
 struct test_chunk {
     uint8_t *bytes;
     uint32_t size;
+};
+
+struct test_music {
+    int marker;
 };
 
 struct test_end_sample_info {
@@ -28,7 +31,12 @@ char g_root[1024] = ".";
 
 static struct test_chunk *g_channels[TEST_MIXER_CHANNELS];
 static int g_playing[TEST_MIXER_CHANNELS];
+static int g_paused[TEST_MIXER_CHANNELS];
 static int g_last_loops;
+static struct test_music *g_music;
+static int g_music_playing;
+static int g_music_paused;
+static char g_last_music_path[1200];
 static void (*g_finished_callback)(int channel);
 static int g_end_calls;
 static int g_stop_calls;
@@ -96,6 +104,7 @@ static int fake_play_channel(int channel, void *chunk, int loops, int ticks) {
     assert(ticks == -1);
     g_channels[channel] = chunk;
     g_playing[channel] = 1;
+    g_paused[channel] = 0;
     g_last_loops = loops;
     return channel;
 }
@@ -109,15 +118,20 @@ static int fake_halt_channel(int channel) {
         g_playing[channel] = 0;
         g_finished_callback(channel);
     }
+    g_paused[channel] = 0;
     return 0;
 }
 
 static void fake_pause(int channel) {
-    (void)channel;
+    g_paused[channel] = 1;
 }
 
 static void fake_resume(int channel) {
-    (void)channel;
+    g_paused[channel] = 0;
+}
+
+static int fake_paused(int channel) {
+    return g_paused[channel];
 }
 
 static int fake_volume(int channel, int volume) {
@@ -149,6 +163,60 @@ static void fake_free_chunk(void *opaque_chunk) {
     }
     free(chunk->bytes);
     free(chunk);
+}
+
+static void *fake_load_music(const char *path) {
+    assert(path);
+    snprintf(g_last_music_path, sizeof(g_last_music_path), "%s", path);
+    struct test_music *music = malloc(sizeof(*music));
+    assert(music);
+    music->marker = 1;
+    return music;
+}
+
+static void *fake_load_music_rw(void *source, int free_source) {
+    assert(source);
+    assert(free_source == 1);
+    return fake_load_music("buffer");
+}
+
+static int fake_play_music(void *opaque_music, int loops) {
+    assert(opaque_music);
+    g_music = opaque_music;
+    g_music_playing = 1;
+    g_music_paused = 0;
+    g_last_loops = loops;
+    return 0;
+}
+
+static int fake_playing_music(void) {
+    return g_music_playing;
+}
+
+static int fake_halt_music(void) {
+    g_music_playing = 0;
+    g_music_paused = 0;
+    return 0;
+}
+
+static void fake_pause_music(void) {
+    g_music_paused = 1;
+}
+
+static void fake_resume_music(void) {
+    g_music_paused = 0;
+}
+
+static int fake_volume_music(int volume) {
+    return volume;
+}
+
+static void fake_free_music(void *opaque_music) {
+    assert(opaque_music == g_music || g_music == NULL);
+    if (opaque_music == g_music) {
+        g_music = NULL;
+    }
+    free(opaque_music);
 }
 
 static int fake_query_spec(int *frequency, uint16_t *format, int *channels) {
@@ -189,9 +257,19 @@ void *dlsym(void *handle, const char *name) {
     TEST_SYMBOL("Mix_HaltChannel", fake_halt_channel)
     TEST_SYMBOL("Mix_Pause", fake_pause)
     TEST_SYMBOL("Mix_Resume", fake_resume)
+    TEST_SYMBOL("Mix_Paused", fake_paused)
     TEST_SYMBOL("Mix_Volume", fake_volume)
     TEST_SYMBOL("Mix_LoadWAV_RW", fake_load_wav)
     TEST_SYMBOL("Mix_FreeChunk", fake_free_chunk)
+    TEST_SYMBOL("Mix_LoadMUS", fake_load_music)
+    TEST_SYMBOL("Mix_LoadMUS_RW", fake_load_music_rw)
+    TEST_SYMBOL("Mix_PlayMusic", fake_play_music)
+    TEST_SYMBOL("Mix_PlayingMusic", fake_playing_music)
+    TEST_SYMBOL("Mix_HaltMusic", fake_halt_music)
+    TEST_SYMBOL("Mix_PauseMusic", fake_pause_music)
+    TEST_SYMBOL("Mix_ResumeMusic", fake_resume_music)
+    TEST_SYMBOL("Mix_VolumeMusic", fake_volume_music)
+    TEST_SYMBOL("Mix_FreeMusic", fake_free_music)
     TEST_SYMBOL("Mix_QuerySpec", fake_query_spec)
     TEST_SYMBOL("Mix_SetPostMix", fake_set_post_mix)
     TEST_SYMBOL("Mix_GetError", fake_error)
@@ -244,6 +322,12 @@ static void finish_channel(int channel) {
     audio_pump();
 }
 
+static void finish_music(void) {
+    assert(g_music_playing);
+    g_music_playing = 0;
+    audio_pump();
+}
+
 static void test_sound_repeat_and_loop(void) {
     const int16_t pcm[] = {100, 200, 300, 400, 500};
     assert(s3eSoundChannelRegister(0, TEST_SOUND_END_CALLBACK, (void *)(uintptr_t)&end_callback,
@@ -279,6 +363,21 @@ static void test_raw_pcm_and_explicit_stop(void) {
     assert(g_stop_calls == 2 && !g_channels[1]);
 }
 
+static void test_sound_pause_status(void) {
+    const int16_t pcm[] = {-1000, 0, 1000};
+    assert(s3eSoundChannelPlay(2, pcm, 3, 1, 0) == 0);
+    assert(s3eSoundChannelGetInt(2, 4) == 1);
+    assert(s3eSoundChannelGetInt(2, 5) == 0);
+
+    assert(s3eSoundChannelPause(2) == 0);
+    assert(s3eSoundChannelGetInt(2, 4) == 1);
+    assert(s3eSoundChannelGetInt(2, 5) == 1);
+
+    assert(s3eSoundChannelResume(2) == 0);
+    assert(s3eSoundChannelGetInt(2, 5) == 0);
+    assert(s3eSoundChannelStop(2) == 0);
+}
+
 static void test_stream_repeat_contract(void) {
     uint8_t wav[TEST_WAV_HEADER_SIZE + sizeof(int16_t)] = {0};
     memcpy(wav, "RIFF", 4);
@@ -291,6 +390,19 @@ static void test_stream_repeat_contract(void) {
     assert(g_last_loops == 0);
     assert(s3eAudioPlayFromBuffer(wav, sizeof(wav), 3) == 0);
     assert(g_last_loops == 2);
+    assert(s3eAudioPause() == 0);
+    assert(g_music_paused == 1);
+    assert(s3eAudioGetInt(1) == 2);
+    assert(s3eAudioResume() == 0);
+    assert(g_music_paused == 0);
+    assert(s3eAudioGetInt(1) == 1);
+    assert(s3eAudioStop() == 0);
+}
+
+static void test_music_file_playback(void) {
+    assert(s3eAudioPlay("tests/s3e_audio_test.c", 1) == 0);
+    assert(strcmp(g_last_music_path, "./tests/s3e_audio_test.c") == 0);
+    assert(g_last_loops == 0);
     assert(s3eAudioStop() == 0);
 }
 
@@ -300,13 +412,14 @@ static void test_audio_callbacks_are_global(void) {
     write_le32(wav + 4, sizeof(wav) - 8);
 
     assert(s3eAudioSetInt(4, 0) == 0);
+    assert(s3eAudioSetInt(4, 1) == 1);
+    assert(s3eAudioGetInt(5) == 1);
     assert(s3eAudioRegister(TEST_AUDIO_STOP_CALLBACK, (void *)(uintptr_t)&audio_stop_callback,
                             NULL) == 0);
-    assert(s3eAudioSetInt(4, 1) == 0);
     assert(s3eAudioPlayFromBuffer(wav, sizeof(wav), 1) == 0);
-    finish_channel(TEST_SOUND_CHANNELS + 1);
+    finish_music();
     assert(g_audio_stop_calls == 1);
-    assert(g_stopped_audio_channel == 1);
+    assert(g_stopped_audio_channel == 0);
 }
 
 static void test_stereo_generator_is_rejected(void) {
@@ -317,7 +430,9 @@ static void test_stereo_generator_is_rejected(void) {
 int main(void) {
     test_sound_repeat_and_loop();
     test_raw_pcm_and_explicit_stop();
+    test_sound_pause_status();
     test_stream_repeat_contract();
+    test_music_file_playback();
     test_audio_callbacks_are_global();
     test_stereo_generator_is_rejected();
     audio_shutdown();
