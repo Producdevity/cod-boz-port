@@ -32,7 +32,13 @@ int g_cursor_active;
 static uint8_t g_fake_buttons[15];
 static int16_t g_fake_axes[6];
 static int g_fake_joystick_count = 1;
-static int g_fake_controller_token;
+static int g_fake_controller_tokens[4];
+static uint8_t g_fake_controller_mapped[4];
+static uint8_t g_fake_controller_attached[4];
+static uint8_t g_fake_controller_openable[4];
+static int g_fake_opened_index;
+static int g_fake_pump_count;
+static int g_fake_flush_count;
 static uint64_t g_fake_now;
 static struct keyboard_event_log g_key_events;
 static struct keyboard_event_log g_character_events;
@@ -46,9 +52,14 @@ static void fake_sdl_quit(uint32_t flags) {
     (void)flags;
 }
 
-static int fake_add_mapping(const char *mapping) {
-    (void)mapping;
-    return 1;
+static void fake_pump_events(void) {
+    ++g_fake_pump_count;
+}
+
+static void fake_flush_events(uint32_t min_type, uint32_t max_type) {
+    assert(min_type == 0);
+    assert(max_type == 0xffff);
+    ++g_fake_flush_count;
 }
 
 static int fake_num_joysticks(void) {
@@ -56,29 +67,54 @@ static int fake_num_joysticks(void) {
 }
 
 static int fake_is_game_controller(int joystick_index) {
-    return joystick_index >= 0 && joystick_index < g_fake_joystick_count;
+    return joystick_index >= 0 && joystick_index < g_fake_joystick_count &&
+           g_fake_controller_mapped[joystick_index];
 }
 
 static void *fake_game_controller_open(int joystick_index) {
-    return fake_is_game_controller(joystick_index) ? &g_fake_controller_token : NULL;
+    if (!fake_is_game_controller(joystick_index) || !g_fake_controller_openable[joystick_index] ||
+        !g_fake_controller_attached[joystick_index]) {
+        return NULL;
+    }
+    g_fake_opened_index = joystick_index;
+    return &g_fake_controller_tokens[joystick_index];
+}
+
+static int fake_controller_index(void *controller) {
+    for (size_t i = 0; i < ARRAY_SIZE(g_fake_controller_tokens); ++i) {
+        if (controller == &g_fake_controller_tokens[i]) {
+            return (int)i;
+        }
+    }
+    assert(0 && "unknown fake controller");
+    return -1;
 }
 
 static void fake_game_controller_close(void *controller) {
-    assert(controller == &g_fake_controller_token);
+    (void)fake_controller_index(controller);
 }
 
 static void *fake_game_controller_get_joystick(void *controller) {
-    assert(controller == &g_fake_controller_token);
+    (void)fake_controller_index(controller);
     return controller;
 }
 
+static int fake_game_controller_get_attached(void *controller) {
+    return g_fake_controller_attached[fake_controller_index(controller)];
+}
+
+static const char *fake_joystick_name_for_index(int joystick_index) {
+    assert(joystick_index >= 0 && joystick_index < g_fake_joystick_count);
+    return joystick_index ? "fake controller 2" : "fake controller 1";
+}
+
 static int fake_joystick_num_hats(void *joystick) {
-    assert(joystick == &g_fake_controller_token);
+    (void)fake_controller_index(joystick);
     return 0;
 }
 
 static uint8_t fake_joystick_get_hat(void *joystick, int hat) {
-    assert(joystick == &g_fake_controller_token);
+    (void)fake_controller_index(joystick);
     (void)hat;
     return 0;
 }
@@ -86,13 +122,13 @@ static uint8_t fake_joystick_get_hat(void *joystick, int hat) {
 static void fake_game_controller_update(void) {}
 
 static int16_t fake_game_controller_get_axis(void *controller, int axis) {
-    assert(controller == &g_fake_controller_token);
+    (void)fake_controller_index(controller);
     assert(axis >= 0 && axis < (int)ARRAY_SIZE(g_fake_axes));
     return g_fake_axes[axis];
 }
 
 static uint8_t fake_game_controller_get_button(void *controller, int button) {
-    assert(controller == &g_fake_controller_token);
+    (void)fake_controller_index(controller);
     assert(button >= 0 && button < (int)ARRAY_SIZE(g_fake_buttons));
     return g_fake_buttons[button];
 }
@@ -103,22 +139,26 @@ static const char *fake_sdl_error(void) {
 
 void *open_first(const char *const *names) {
     assert(names && names[0]);
-    return &g_fake_controller_token;
+    return &g_fake_controller_tokens[0];
 }
 
 void *dlsym(void *handle, const char *name) {
-    assert(handle == &g_fake_controller_token);
+    assert(handle == &g_fake_controller_tokens[0]);
 #define TEST_SYMBOL(symbol, function)                                                              \
     if (strcmp(name, symbol) == 0) {                                                               \
         return (void *)(uintptr_t)&function;                                                       \
     }
     TEST_SYMBOL("SDL_InitSubSystem", fake_sdl_init)
     TEST_SYMBOL("SDL_QuitSubSystem", fake_sdl_quit)
-    TEST_SYMBOL("SDL_GameControllerAddMapping", fake_add_mapping)
+    TEST_SYMBOL("SDL_PumpEvents", fake_pump_events)
+    TEST_SYMBOL("SDL_FlushEvents", fake_flush_events)
     TEST_SYMBOL("SDL_NumJoysticks", fake_num_joysticks)
     TEST_SYMBOL("SDL_IsGameController", fake_is_game_controller)
+    TEST_SYMBOL("SDL_JoystickNameForIndex", fake_joystick_name_for_index)
+    TEST_SYMBOL("SDL_GameControllerNameForIndex", fake_joystick_name_for_index)
     TEST_SYMBOL("SDL_GameControllerOpen", fake_game_controller_open)
     TEST_SYMBOL("SDL_GameControllerClose", fake_game_controller_close)
+    TEST_SYMBOL("SDL_GameControllerGetAttached", fake_game_controller_get_attached)
     TEST_SYMBOL("SDL_GameControllerGetJoystick", fake_game_controller_get_joystick)
     TEST_SYMBOL("SDL_JoystickNumHats", fake_joystick_num_hats)
     TEST_SYMBOL("SDL_JoystickGetHat", fake_joystick_get_hat)
@@ -131,7 +171,7 @@ void *dlsym(void *handle, const char *name) {
 }
 
 int dlclose(void *handle) {
-    assert(handle == &g_fake_controller_token);
+    assert(handle == &g_fake_controller_tokens[0]);
     return 0;
 }
 
@@ -160,7 +200,16 @@ static void reset_input(void) {
     memset(g_pointer_states, 0, sizeof(g_pointer_states));
     memset(&g_key_events, 0, sizeof(g_key_events));
     memset(&g_character_events, 0, sizeof(g_character_events));
+    memset(g_fake_controller_mapped, 0, sizeof(g_fake_controller_mapped));
+    memset(g_fake_controller_attached, 0, sizeof(g_fake_controller_attached));
+    memset(g_fake_controller_openable, 0, sizeof(g_fake_controller_openable));
     g_fake_joystick_count = 1;
+    g_fake_controller_mapped[0] = 1;
+    g_fake_controller_attached[0] = 1;
+    g_fake_controller_openable[0] = 1;
+    g_fake_opened_index = -1;
+    g_fake_pump_count = 0;
+    g_fake_flush_count = 0;
     g_fake_now = 0;
     g_pointer_down = 0;
     g_cursor_active = 0;
@@ -175,6 +224,61 @@ static void assert_event(const struct keyboard_event_log *log, size_t index, int
     assert(index < log->count);
     assert(log->events[index].key == TEST_XPERIA_KEY_SHOOT);
     assert(log->events[index].pressed == pressed);
+}
+
+static void test_skips_unmapped_joysticks(void) {
+    reset_input();
+
+    g_fake_joystick_count = 2;
+    g_fake_controller_mapped[0] = 0;
+    g_fake_controller_mapped[1] = 1;
+    g_fake_controller_attached[1] = 1;
+    g_fake_controller_openable[1] = 1;
+
+    input_pump();
+    assert(g_fake_opened_index == 1);
+    assert(g_fake_pump_count == 1);
+    assert(g_fake_flush_count == 1);
+}
+
+static void test_retries_controller_discovery(void) {
+    reset_input();
+
+    g_fake_joystick_count = 0;
+    input_pump();
+    assert(g_fake_opened_index == -1);
+
+    g_fake_joystick_count = 1;
+    for (int i = 0; i < 64 && g_fake_opened_index < 0; ++i) {
+        input_pump();
+    }
+    assert(g_fake_opened_index == 0);
+}
+
+static void test_disconnect_releases_input_and_reconnects(void) {
+    reset_input();
+
+    g_fake_buttons[TEST_SDL_BUTTON_RIGHTSHOULDER] = 1;
+    input_pump();
+    assert(g_fake_opened_index == 0);
+    assert(g_key_events.count == 1);
+
+    g_fake_buttons[TEST_SDL_BUTTON_RIGHTSHOULDER] = 0;
+    g_fake_controller_attached[0] = 0;
+    g_fake_joystick_count = 2;
+    g_fake_controller_mapped[1] = 1;
+    g_fake_controller_attached[1] = 1;
+    g_fake_controller_openable[1] = 1;
+    input_pump();
+
+    assert(g_fake_opened_index == 1);
+    assert(g_key_events.count == 2);
+    assert_event(&g_key_events, 1, 0);
+
+    g_fake_buttons[TEST_SDL_BUTTON_RIGHTSHOULDER] = 1;
+    input_pump();
+    assert(g_key_events.count == 3);
+    assert_event(&g_key_events, 2, 1);
 }
 
 static void test_first_hold_publishes_down_until_release(void) {
@@ -298,6 +402,9 @@ static void test_cursor_mode_releases_and_reacquires_held_action(void) {
 }
 
 int main(void) {
+    test_skips_unmapped_joysticks();
+    test_retries_controller_discovery();
+    test_disconnect_releases_input_and_reconnects();
     test_first_hold_publishes_down_until_release();
     test_overlapping_shoot_sources_release_once();
     test_trigger_hysteresis_ignores_threshold_jitter();

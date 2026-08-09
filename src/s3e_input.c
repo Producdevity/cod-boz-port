@@ -5,6 +5,8 @@
 enum {
     SDL_INIT_JOYSTICK = 0x00000200u,
     SDL_INIT_GAMECONTROLLER = 0x00002000u,
+    SDL_FIRSTEVENT = 0,
+    SDL_LASTEVENT = 0xffff,
 };
 
 enum {
@@ -90,6 +92,7 @@ enum {
 enum {
     KEYBOARD_KEY_COUNT = 256,
     TOUCHPAD_COUNT = 2,
+    CONTROLLER_RESCAN_MS = 1000,
     AXIS_DEADZONE = 9000,
     XPERIA_AXIS_DEADZONE = 6000,
     TRIGGER_PRESS_THRESHOLD = 16384,
@@ -115,11 +118,15 @@ struct key_map {
 struct sdl_input_api {
     int (*InitSubSystem)(uint32_t flags);
     void (*QuitSubSystem)(uint32_t flags);
-    int (*GameControllerAddMapping)(const char *mapping);
+    void (*PumpEvents)(void);
+    void (*FlushEvents)(uint32_t min_type, uint32_t max_type);
     int (*NumJoysticks)(void);
     int (*IsGameController)(int joystick_index);
+    const char *(*JoystickNameForIndex)(int joystick_index);
+    const char *(*GameControllerNameForIndex)(int joystick_index);
     void *(*GameControllerOpen)(int joystick_index);
     void (*GameControllerClose)(void *gamecontroller);
+    int (*GameControllerGetAttached)(void *gamecontroller);
     void *(*GameControllerGetJoystick)(void *gamecontroller);
     int (*JoystickNumHats)(void *joystick);
     uint8_t (*JoystickGetHat)(void *joystick, int hat);
@@ -162,10 +169,13 @@ static struct sdl_input_api g_sdl;
 static void *g_controller;
 static void *g_joystick;
 static int g_sdl_tried;
+static int g_sdl_initialized;
 static int g_input_pumping;
 static int g_prev_select;
 static int g_prev_a;
 static uint64_t g_input_last_ms;
+static uint64_t g_controller_scan_ms;
+static int g_last_joystick_count = -1;
 static uint8_t g_hat_mask;
 static uint8_t g_trigger_down[TRIGGER_COUNT];
 
@@ -186,6 +196,48 @@ static void sdl_load_optional_symbol(void **slot, const char *name) {
     *slot = dlsym(g_sdl2, name);
 }
 
+static const char *input_joystick_name(int index) {
+    const char *name = NULL;
+    if (g_sdl.GameControllerNameForIndex) {
+        name = g_sdl.GameControllerNameForIndex(index);
+    }
+    if (!name && g_sdl.JoystickNameForIndex) {
+        name = g_sdl.JoystickNameForIndex(index);
+    }
+    return name ? name : "unknown";
+}
+
+static void input_scan_controllers(void) {
+    int count = g_sdl.NumJoysticks();
+    int report = count != g_last_joystick_count;
+    g_last_joystick_count = count;
+
+    for (int i = 0; i < count; ++i) {
+        if (!g_sdl.IsGameController(i)) {
+            if (report) {
+                fprintf(stderr, "[input] joystick %d (%s) has no SDL controller mapping\n", i,
+                        input_joystick_name(i));
+            }
+            continue;
+        }
+
+        g_controller = g_sdl.GameControllerOpen(i);
+        if (!g_controller) {
+            if (report) {
+                const char *error = g_sdl.GetError ? g_sdl.GetError() : NULL;
+                fprintf(stderr, "[input] could not open controller %d (%s): %s\n", i,
+                        input_joystick_name(i), error ? error : "unknown");
+            }
+            continue;
+        }
+
+        g_joystick =
+            g_sdl.GameControllerGetJoystick ? g_sdl.GameControllerGetJoystick(g_controller) : NULL;
+        fprintf(stderr, "[input] using controller %d (%s)\n", i, input_joystick_name(i));
+        return;
+    }
+}
+
 static void input_open(void) {
     if (g_sdl_tried) {
         return;
@@ -201,11 +253,17 @@ static void input_open(void) {
     int ok = 1;
     ok &= sdl_load_symbol((void **)&g_sdl.InitSubSystem, "SDL_InitSubSystem");
     ok &= sdl_load_symbol((void **)&g_sdl.QuitSubSystem, "SDL_QuitSubSystem");
-    ok &= sdl_load_symbol((void **)&g_sdl.GameControllerAddMapping, "SDL_GameControllerAddMapping");
+    ok &= sdl_load_symbol((void **)&g_sdl.PumpEvents, "SDL_PumpEvents");
+    ok &= sdl_load_symbol((void **)&g_sdl.FlushEvents, "SDL_FlushEvents");
     ok &= sdl_load_symbol((void **)&g_sdl.NumJoysticks, "SDL_NumJoysticks");
     ok &= sdl_load_symbol((void **)&g_sdl.IsGameController, "SDL_IsGameController");
+    sdl_load_optional_symbol((void **)&g_sdl.JoystickNameForIndex, "SDL_JoystickNameForIndex");
+    sdl_load_optional_symbol((void **)&g_sdl.GameControllerNameForIndex,
+                             "SDL_GameControllerNameForIndex");
     ok &= sdl_load_symbol((void **)&g_sdl.GameControllerOpen, "SDL_GameControllerOpen");
     ok &= sdl_load_symbol((void **)&g_sdl.GameControllerClose, "SDL_GameControllerClose");
+    ok &=
+        sdl_load_symbol((void **)&g_sdl.GameControllerGetAttached, "SDL_GameControllerGetAttached");
     sdl_load_optional_symbol((void **)&g_sdl.GameControllerGetJoystick,
                              "SDL_GameControllerGetJoystick");
     sdl_load_optional_symbol((void **)&g_sdl.JoystickNumHats, "SDL_JoystickNumHats");
@@ -223,24 +281,7 @@ static void input_open(void) {
         }
         return;
     }
-
-    const char *mapping = getenv("SDL_GAMECONTROLLERCONFIG");
-    if (mapping && mapping[0]) {
-        g_sdl.GameControllerAddMapping(mapping);
-    }
-    int count = g_sdl.NumJoysticks();
-    for (int i = 0; i < count; ++i) {
-        if (!g_sdl.IsGameController(i)) {
-            continue;
-        }
-        g_controller = g_sdl.GameControllerOpen(i);
-        if (g_controller) {
-            g_joystick = g_sdl.GameControllerGetJoystick
-                             ? g_sdl.GameControllerGetJoystick(g_controller)
-                             : NULL;
-            break;
-        }
-    }
+    g_sdl_initialized = 1;
 }
 
 static uint8_t input_current_hat_mask(void) {
@@ -662,6 +703,38 @@ static void input_update_game_touchpads(void) {
                           (width * 4) / 5, center_y, look_radius, look_radius);
 }
 
+static void input_close_controller(void) {
+    input_release_pointer();
+    touchpad_release_all();
+    keyboard_release_all();
+    input_reset_triggers();
+    g_prev_select = 0;
+    g_prev_a = 0;
+    g_input_last_ms = 0;
+    g_hat_mask = 0;
+
+    if (g_controller && g_sdl.GameControllerClose) {
+        g_sdl.GameControllerClose(g_controller);
+    }
+    g_controller = NULL;
+    g_joystick = NULL;
+}
+
+static void input_refresh_controller(uint64_t now) {
+    if (g_controller && !g_sdl.GameControllerGetAttached(g_controller)) {
+        fprintf(stderr, "[input] controller disconnected\n");
+        input_close_controller();
+        g_controller_scan_ms = 0;
+        g_last_joystick_count = -1;
+    }
+
+    if (!g_controller &&
+        (!g_controller_scan_ms || now - g_controller_scan_ms >= CONTROLLER_RESCAN_MS)) {
+        g_controller_scan_ms = now;
+        input_scan_controllers();
+    }
+}
+
 void input_pump(void) {
     if (g_input_pumping) {
         return;
@@ -669,13 +742,22 @@ void input_pump(void) {
     g_input_pumping = 1;
 
     input_open();
+    if (!g_sdl_initialized) {
+        goto out;
+    }
+
+    /* The game polls controller state and has no SDL event consumer. */
+    g_sdl.PumpEvents();
+    g_sdl.FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+
+    uint64_t now = monotonic_ms();
+    input_refresh_controller(now);
     if (!g_controller) {
         goto out;
     }
     g_sdl.GameControllerUpdate();
     g_hat_mask = input_current_hat_mask();
 
-    uint64_t now = monotonic_ms();
     if (!g_input_last_ms) {
         g_input_last_ms = now;
     }
@@ -714,17 +796,9 @@ out:
 }
 
 void input_shutdown(void) {
-    input_release_pointer();
-    touchpad_release_all();
-    keyboard_release_all();
-    input_reset_triggers();
-    if (g_controller && g_sdl.GameControllerClose) {
-        g_sdl.GameControllerClose(g_controller);
-        g_controller = NULL;
-        g_joystick = NULL;
-    }
+    input_close_controller();
     if (g_sdl2) {
-        if (g_sdl.QuitSubSystem) {
+        if (g_sdl_initialized && g_sdl.QuitSubSystem) {
             g_sdl.QuitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
         }
         dlclose(g_sdl2);
@@ -732,11 +806,10 @@ void input_shutdown(void) {
     }
     memset(&g_sdl, 0, sizeof(g_sdl));
     g_sdl_tried = 0;
+    g_sdl_initialized = 0;
     g_input_pumping = 0;
-    g_prev_select = 0;
-    g_prev_a = 0;
-    g_input_last_ms = 0;
-    g_hat_mask = 0;
+    g_controller_scan_ms = 0;
+    g_last_joystick_count = -1;
 }
 
 int32_t s3eKeyboardRegister(uint32_t id, void *callback, void *user_data) {
