@@ -5,7 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 platform="${1:-}"
 if [ -z "$platform" ]; then
-  echo "Usage: $0 <muos|knulli|darkos> [--root PATH] <ssh-host>" >&2
+  echo "Usage: $0 <muos|knulli|darkos|rocknix> [--root PATH] <ssh-host>" >&2
   exit 2
 fi
 shift
@@ -26,6 +26,11 @@ case "$platform" in
     host="${CODBOZ_DARKOS_DEPLOY_HOST:-}"
     port_directory="ports"
     ;;
+  rocknix)
+    target_root="${CODBOZ_ROCKNIX_DEPLOY_ROOT:-/storage/roms}"
+    host="${CODBOZ_ROCKNIX_DEPLOY_HOST:-}"
+    port_directory="ports"
+    ;;
   *)
     echo "Unknown platform: $platform" >&2
     exit 2
@@ -42,6 +47,9 @@ usage() {
       ;;
     darkos)
       echo "Usage: $0 darkos [--roms|--roms2|--root PATH] <ssh-host>" >&2
+      ;;
+    rocknix)
+      echo "Usage: $0 rocknix [--storage|--root PATH] <ssh-host>" >&2
       ;;
   esac
 }
@@ -74,6 +82,9 @@ while [ "$#" -gt 0 ]; do
       ;;
     --roms2)
       target_root="/roms2"
+      ;;
+    --storage)
+      target_root="/storage/roms"
       ;;
     -h|--help)
       usage
