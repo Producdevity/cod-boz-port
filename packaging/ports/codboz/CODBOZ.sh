@@ -37,18 +37,12 @@ mkdir -p "$savehome" "$apkdir" "$assetdir"
 cd "$gamedir" || exit 1
 : > "$gamedir/log.txt" && exec > >(tee "$gamedir/log.txt") 2>&1
 
+# PortMaster overwrites packaged files during updates, so create the editable config once.
 if [ ! -f "$config" ]; then
   if [ -f "$config_example" ]; then
     cp "$config_example" "$config"
   else
     printf 'multiplayer_server=\nmultiplayer_proxy=0\nvoice_chat=0\nplayer_name=Player\n' > "$config"
-  fi
-else
-  if ! grep -Eq '^[[:space:]]*voice_chat[[:space:]]*=' "$config"; then
-    printf '\nvoice_chat=0\n' >> "$config"
-  fi
-  if ! grep -Eq '^[[:space:]]*player_name[[:space:]]*=' "$config"; then
-    printf '\nplayer_name=Player\n' >> "$config"
   fi
 fi
 
