@@ -37,6 +37,7 @@ SHELL_FILES := $(shell find scripts packaging tests -type f -name '*.sh' | sort)
 
 LOADER_SRC := \
   src/codboz_assets.c \
+  src/codboz_frame_interpolation.c \
   src/main.c \
   src/s3e_config.c \
   src/s3e_audio.c \

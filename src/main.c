@@ -1,3 +1,4 @@
+#include "codboz_frame_interpolation.h"
 #include "s3e_host.h"
 #include "s3e_image.h"
 
@@ -275,6 +276,13 @@ int main(int argc, char **argv) {
 
     struct s3e_loaded_image loaded;
     if (!s3e_image_map_and_relocate(&image, s3e_host_resolve, &loaded)) {
+        s3e_host_shutdown();
+        s3e_image_free(&image);
+        return 1;
+    }
+    if (!codboz_install_frame_interpolation(&loaded)) {
+        fprintf(stderr, "unsupported game executable: unable to install frame interpolation\n");
+        s3e_loaded_image_unmap(&loaded);
         s3e_host_shutdown();
         s3e_image_free(&image);
         return 1;
