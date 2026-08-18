@@ -14,8 +14,7 @@ mkdir -p "$control_dir" "$game_dir"
 
 printf 'directory=%q\nget_controls() { :; }\npm_show_error() { :; }\npm_finish() { :; }\n' \
   "${storage#/}" > "$control_dir/control.txt"
-printf 'multiplayer_server=\nmultiplayer_proxy=0\nvoice_chat=0\nplayer_name=Player\n' \
-  > "$game_dir/config.example.txt"
+cp packaging/ports/codboz/codboz/config.example.txt "$game_dir/config.example.txt"
 
 if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1; then
   echo "launcher unexpectedly succeeded without its loader" >&2
@@ -23,15 +22,14 @@ if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>
 fi
 cmp "$game_dir/config.example.txt" "$game_dir/config.txt"
 
-printf 'multiplayer_server=192.168.178.37\nmultiplayer_proxy=0' > "$game_dir/config.txt"
+existing_config="$test_root/existing-config.txt"
+printf 'multiplayer_server=192.168.178.37\nmultiplayer_proxy=0' > "$existing_config"
+cp "$existing_config" "$game_dir/config.txt"
 if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1; then
   echo "launcher unexpectedly succeeded without its loader" >&2
   exit 1
 fi
-grep -qx 'multiplayer_server=192.168.178.37' "$game_dir/config.txt"
-grep -qx 'multiplayer_proxy=0' "$game_dir/config.txt"
-test "$(grep -c '^voice_chat=0$' "$game_dir/config.txt")" -eq 1
-test "$(grep -c '^player_name=Player$' "$game_dir/config.txt")" -eq 1
+cmp "$existing_config" "$game_dir/config.txt"
 
 printf 'game-data\n' > "$game_dir/assets/boz.s3e.unpacked"
 printf 'game-data\n' > "$game_dir/assets/blackops_etc.dz"
