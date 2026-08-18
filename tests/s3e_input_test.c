@@ -5,8 +5,11 @@
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 
 enum {
+    TEST_SDL_BUTTON_A = 0,
     TEST_SDL_BUTTON_BACK = 4,
     TEST_SDL_BUTTON_RIGHTSHOULDER = 10,
+    TEST_SDL_AXIS_LEFTX = 0,
+    TEST_SDL_AXIS_RIGHTX = 2,
     TEST_SDL_AXIS_TRIGGERRIGHT = 5,
     TEST_XPERIA_KEY_SHOOT = 75,
     TEST_KEY_STATE_DOWN = 1,
@@ -16,6 +19,30 @@ enum {
 
 struct keyboard_event_log {
     struct s3e_keyboard_event events[32];
+    size_t count;
+};
+
+enum touchpad_event_type {
+    TOUCHPAD_EVENT_PRESS,
+    TOUCHPAD_EVENT_MOTION,
+};
+
+struct touchpad_event {
+    enum touchpad_event_type type;
+    int32_t id;
+    int32_t x;
+    int32_t y;
+};
+
+struct touchpad_event_log {
+    struct touchpad_event events[8];
+    size_t count;
+};
+
+struct pointer_event_log {
+    int event_ids[8];
+    int32_t x[8];
+    int32_t y[8];
     size_t count;
 };
 
@@ -42,6 +69,8 @@ static int g_fake_flush_count;
 static uint64_t g_fake_now;
 static struct keyboard_event_log g_key_events;
 static struct keyboard_event_log g_character_events;
+static struct touchpad_event_log g_touchpad_events;
+static struct pointer_event_log g_pointer_events;
 
 static int fake_sdl_init(uint32_t flags) {
     (void)flags;
@@ -189,6 +218,54 @@ static int32_t record_keyboard_event(void *system_data, void *user_data) {
     return 0;
 }
 
+static int32_t record_touchpad_button(void *system_data, void *user_data) {
+    struct touchpad_event_log *log = user_data;
+    const struct s3e_touchpad_button_event *event = system_data;
+    assert(log->count < ARRAY_SIZE(log->events));
+    assert(event->pressed == 1);
+    log->events[log->count++] = (struct touchpad_event){
+        .type = TOUCHPAD_EVENT_PRESS,
+        .id = event->id,
+        .x = event->x,
+        .y = event->y,
+    };
+    return 0;
+}
+
+static int32_t record_touchpad_motion(void *system_data, void *user_data) {
+    struct touchpad_event_log *log = user_data;
+    const struct s3e_touchpad_motion_event *event = system_data;
+    assert(log->count < ARRAY_SIZE(log->events));
+    log->events[log->count++] = (struct touchpad_event){
+        .type = TOUCHPAD_EVENT_MOTION,
+        .id = event->id,
+        .x = event->x,
+        .y = event->y,
+    };
+    return 0;
+}
+
+static int32_t record_pointer_button(void *system_data, void *user_data) {
+    struct pointer_event_log *log = user_data;
+    const struct s3e_pointer_button_event *event = system_data;
+    assert(log->count < ARRAY_SIZE(log->event_ids));
+    assert(event->pressed == 1);
+    log->event_ids[log->count] = 0;
+    log->x[log->count] = event->x;
+    log->y[log->count++] = event->y;
+    return 0;
+}
+
+static int32_t record_pointer_motion(void *system_data, void *user_data) {
+    struct pointer_event_log *log = user_data;
+    const struct s3e_pointer_motion_event *event = system_data;
+    assert(log->count < ARRAY_SIZE(log->event_ids));
+    log->event_ids[log->count] = 1;
+    log->x[log->count] = event->x;
+    log->y[log->count++] = event->y;
+    return 0;
+}
+
 static void reset_input(void) {
     memset(g_keyboard_callbacks, 0, sizeof(g_keyboard_callbacks));
     memset(g_pointer_callbacks, 0, sizeof(g_pointer_callbacks));
@@ -200,6 +277,8 @@ static void reset_input(void) {
     memset(g_pointer_states, 0, sizeof(g_pointer_states));
     memset(&g_key_events, 0, sizeof(g_key_events));
     memset(&g_character_events, 0, sizeof(g_character_events));
+    memset(&g_touchpad_events, 0, sizeof(g_touchpad_events));
+    memset(&g_pointer_events, 0, sizeof(g_pointer_events));
     memset(g_fake_controller_mapped, 0, sizeof(g_fake_controller_mapped));
     memset(g_fake_controller_attached, 0, sizeof(g_fake_controller_attached));
     memset(g_fake_controller_openable, 0, sizeof(g_fake_controller_openable));
@@ -401,6 +480,58 @@ static void test_cursor_mode_releases_and_reacquires_held_action(void) {
            (TEST_KEY_STATE_DOWN | TEST_KEY_STATE_PRESSED));
 }
 
+static void test_touchpad_initial_position_precedes_press(void) {
+    reset_input();
+
+    g_touchpad_callbacks[0].callback = (void *)(uintptr_t)&record_touchpad_button;
+    g_touchpad_callbacks[0].user_data = &g_touchpad_events;
+    g_touchpad_callbacks[1].callback = (void *)(uintptr_t)&record_touchpad_motion;
+    g_touchpad_callbacks[1].user_data = &g_touchpad_events;
+    g_fake_axes[TEST_SDL_AXIS_RIGHTX] = 16000;
+
+    input_pump();
+
+    assert(g_touchpad_events.count == 2);
+    assert(g_touchpad_events.events[0].type == TOUCHPAD_EVENT_MOTION);
+    assert(g_touchpad_events.events[0].id == 1);
+    assert(g_touchpad_events.events[1].type == TOUCHPAD_EVENT_PRESS);
+    assert(g_touchpad_events.events[1].id == 1);
+    assert(g_touchpad_events.events[0].x == g_touchpad_events.events[1].x);
+    assert(g_touchpad_events.events[0].y == g_touchpad_events.events[1].y);
+
+    g_fake_axes[TEST_SDL_AXIS_RIGHTX] = 20000;
+    input_pump();
+
+    assert(g_touchpad_events.count == 3);
+    assert(g_touchpad_events.events[2].type == TOUCHPAD_EVENT_MOTION);
+    assert(g_touchpad_events.events[2].id == 1);
+    assert(g_touchpad_events.events[0].x != g_touchpad_events.events[2].x);
+    assert(g_touchpad_events.events[0].y == g_touchpad_events.events[2].y);
+}
+
+static void test_cursor_position_precedes_press(void) {
+    reset_input();
+
+    g_pointer_callbacks[0].callback = (void *)(uintptr_t)&record_pointer_button;
+    g_pointer_callbacks[0].user_data = &g_pointer_events;
+    g_pointer_callbacks[1].callback = (void *)(uintptr_t)&record_pointer_motion;
+    g_pointer_callbacks[1].user_data = &g_pointer_events;
+    g_fake_buttons[TEST_SDL_BUTTON_BACK] = 1;
+    input_pump();
+    g_fake_buttons[TEST_SDL_BUTTON_BACK] = 0;
+    g_fake_buttons[TEST_SDL_BUTTON_A] = 1;
+    g_fake_axes[TEST_SDL_AXIS_LEFTX] = 20000;
+    g_fake_now += 16;
+
+    input_pump();
+
+    assert(g_pointer_events.count == 2);
+    assert(g_pointer_events.event_ids[0] == 1);
+    assert(g_pointer_events.event_ids[1] == 0);
+    assert(g_pointer_events.x[0] == g_pointer_events.x[1]);
+    assert(g_pointer_events.y[0] == g_pointer_events.y[1]);
+}
+
 int main(void) {
     test_skips_unmapped_joysticks();
     test_retries_controller_discovery();
@@ -410,6 +541,8 @@ int main(void) {
     test_trigger_hysteresis_ignores_threshold_jitter();
     test_opposite_edges_survive_until_publication();
     test_cursor_mode_releases_and_reacquires_held_action();
+    test_touchpad_initial_position_precedes_press();
+    test_cursor_position_precedes_press();
     reset_input();
     input_shutdown();
     puts("s3e_input_test: ok");

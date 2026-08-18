@@ -636,13 +636,6 @@ static void touchpad_update_stick(uint32_t id, int32_t x_axis, int32_t y_axis, i
 }
 
 static void input_update_cursor(uint64_t dt) {
-    int a = input_button(SDL_BUTTON_A);
-    if (a != g_prev_a) {
-        pointer_set_down(a);
-        pointer_dispatch_button(0, a ? 1 : 0);
-    }
-    g_prev_a = a;
-
     int32_t x_axis = input_axis(SDL_AXIS_LEFTX);
     int32_t y_axis = input_axis(SDL_AXIS_LEFTY);
     if (input_dpad_left()) {
@@ -655,21 +648,26 @@ static void input_update_cursor(uint64_t dt) {
     } else if (input_dpad_down()) {
         y_axis = 32767;
     }
-    if (!x_axis && !y_axis) {
-        return;
+    if (x_axis || y_axis) {
+        int32_t old_x = g_pointer_x;
+        int32_t old_y = g_pointer_y;
+        const int32_t x_speed = (int32_t)((int64_t)900 * window_width() / 640);
+        const int32_t y_speed = (int32_t)((int64_t)900 * window_height() / 480);
+        g_pointer_x = clamp_pointer_x(
+            g_pointer_x + (int32_t)((int64_t)x_axis * (int64_t)dt * x_speed / 32767 / 1000));
+        g_pointer_y = clamp_pointer_y(
+            g_pointer_y + (int32_t)((int64_t)y_axis * (int64_t)dt * y_speed / 32767 / 1000));
+        if (g_pointer_x != old_x || g_pointer_y != old_y) {
+            pointer_dispatch_motion();
+        }
     }
 
-    int32_t old_x = g_pointer_x;
-    int32_t old_y = g_pointer_y;
-    const int32_t x_speed = (int32_t)((int64_t)900 * window_width() / 640);
-    const int32_t y_speed = (int32_t)((int64_t)900 * window_height() / 480);
-    g_pointer_x = clamp_pointer_x(
-        g_pointer_x + (int32_t)((int64_t)x_axis * (int64_t)dt * x_speed / 32767 / 1000));
-    g_pointer_y = clamp_pointer_y(
-        g_pointer_y + (int32_t)((int64_t)y_axis * (int64_t)dt * y_speed / 32767 / 1000));
-    if (g_pointer_x != old_x || g_pointer_y != old_y) {
-        pointer_dispatch_motion();
+    int a = input_button(SDL_BUTTON_A);
+    if (a != g_prev_a) {
+        pointer_set_down(a);
+        pointer_dispatch_button(0, a ? 1 : 0);
     }
+    g_prev_a = a;
 }
 
 static void input_update_game_keys(void) {
