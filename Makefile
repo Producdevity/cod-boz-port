@@ -25,6 +25,7 @@ HOST_TESTS := \
   $(BUILD_DIR)/tests/s3e_audio_test \
   $(BUILD_DIR)/tests/s3e_audio_unit_test \
   $(BUILD_DIR)/tests/s3e_input_test
+ARM_TESTS := $(BUILD_DIR)/tests/codboz_frame_interpolation_test
 CFLAGS ?= -O2 -g
 PROJECT_CPPFLAGS := -D_GNU_SOURCE -Iinclude -Ithird_party/lzma
 PROJECT_CFLAGS := -std=c11 -Wall -Wextra -Werror
@@ -191,9 +192,20 @@ $(BUILD_DIR)/tests/s3e_input_test: tests/s3e_input_test.c src/s3e_input.c \
 	  -Ddlclose=s3e_input_test_dlclose $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) \
 	  -o $@ tests/s3e_input_test.c src/s3e_input.c $(HOST_TEST_LDFLAGS)
 
+$(BUILD_DIR)/tests/codboz_frame_interpolation_test: \
+    tests/codboz_frame_interpolation_test.c src/codboz_frame_interpolation.c \
+    include/codboz_frame_interpolation.h include/s3e_host_internal.h include/s3e_image.h | \
+    $(BUILD_DIR)
+	mkdir -p $(dir $@)
+	$(CC) $(PROJECT_CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) $(TARGET_CFLAGS) \
+	  -o $@ tests/codboz_frame_interpolation_test.c src/codboz_frame_interpolation.c
+
 test-host: $(HOST_TESTS)
 	@set -e; for test in $(HOST_TESTS); do "$$test"; done
 	tests/portmaster_launcher_test.sh
+
+test-arm: $(ARM_TESTS)
+	@set -e; for test in $(ARM_TESTS); do qemu-arm -L /usr/arm-linux-gnueabihf "$$test"; done
 
 test-host-sanitize:
 	$(MAKE) BUILD_DIR=$(BUILD_DIR)/sanitize \
@@ -202,4 +214,4 @@ test-host-sanitize:
 
 -include $(LOADER_OBJ:.o=.d)
 -include $(EXTRACT_OBJ:.o=.d)
-.PHONY: all check clean format format-check package shellcheck test-host test-host-sanitize zip
+.PHONY: all check clean format format-check package shellcheck test-arm test-host test-host-sanitize zip

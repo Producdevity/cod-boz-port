@@ -14,7 +14,8 @@ enum {
 };
 
 typedef uint32_t(S3E_SOFTFP *director_callback_fn)(void *director, uint32_t channel, uint32_t step,
-                                                   uint32_t value);
+                                                   uint32_t value, uint32_t argument4,
+                                                   uint32_t argument5);
 typedef void(S3E_SOFTFP *capture_transforms_fn)(void *active_set);
 typedef void(S3E_SOFTFP *apply_factor_fn)(void *active_set, uint32_t factor);
 
@@ -51,19 +52,23 @@ static void *active_transform_set(void) {
 }
 
 static S3E_SOFTFP uint32_t director_fixed_callback(void *director, uint32_t channel, uint32_t step,
-                                                   uint32_t value) {
+                                                   uint32_t value, uint32_t argument4,
+                                                   uint32_t argument5) {
     if (channel == INTERPOLATION_CHANNEL) {
         void *active_set = active_transform_set();
         if (active_set) {
             g_capture_transforms(active_set);
         }
     }
-    return g_original_fixed_callback(director, channel, step, value);
+    return g_original_fixed_callback(director, channel, step, value, argument4, argument5);
 }
 
 static S3E_SOFTFP uint32_t director_interpolate_callback(void *director, uint32_t channel,
-                                                         uint32_t step, uint32_t factor_bits) {
+                                                         uint32_t step, uint32_t factor_bits,
+                                                         uint32_t argument4, uint32_t argument5) {
     (void)step;
+    (void)argument4;
+    (void)argument5;
     if (channel != INTERPOLATION_CHANNEL) {
         return (uint32_t)(uintptr_t)director;
     }
