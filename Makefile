@@ -1,5 +1,8 @@
 CC ?= gcc
 HOST_CC ?= cc
+ARM_CC ?= arm-linux-gnueabihf-gcc
+QEMU_ARM ?= qemu-arm
+ARM_SYSROOT ?= /usr/arm-linux-gnueabihf
 CLANG_FORMAT ?= clang-format
 SHELLCHECK ?= shellcheck
 HOST_TEST_CFLAGS ?= -O0 -g
@@ -31,7 +34,7 @@ PROJECT_CPPFLAGS := -D_GNU_SOURCE -Iinclude -Ithird_party/lzma
 PROJECT_CFLAGS := -std=c11 -Wall -Wextra -Werror
 TARGET_CFLAGS ?=
 LDFLAGS ?=
-LOADER_LDLIBS += -ldl -pthread
+LOADER_LDLIBS += -ldl -pthread -lm
 FORMAT_FILES := $(shell find include src tests tools -type f \( -name '*.c' -o -name '*.h' \) | sort)
 SHELL_FILES := $(shell find scripts packaging tests -type f -name '*.sh' | sort) \
   packaging/ports/codboz/codboz/codboz_setup
@@ -197,15 +200,15 @@ $(BUILD_DIR)/tests/codboz_frame_interpolation_test: \
     include/codboz_frame_interpolation.h include/s3e_host_internal.h include/s3e_image.h | \
     $(BUILD_DIR)
 	mkdir -p $(dir $@)
-	$(CC) $(PROJECT_CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) $(TARGET_CFLAGS) \
-	  -o $@ tests/codboz_frame_interpolation_test.c src/codboz_frame_interpolation.c
+	$(ARM_CC) $(PROJECT_CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) $(TARGET_CFLAGS) \
+	  -o $@ tests/codboz_frame_interpolation_test.c src/codboz_frame_interpolation.c -lm
 
 test-host: $(HOST_TESTS)
 	@set -e; for test in $(HOST_TESTS); do "$$test"; done
 	tests/portmaster_launcher_test.sh
 
 test-arm: $(ARM_TESTS)
-	@set -e; for test in $(ARM_TESTS); do qemu-arm -L /usr/arm-linux-gnueabihf "$$test"; done
+	@set -e; for test in $(ARM_TESTS); do $(QEMU_ARM) -L $(ARM_SYSROOT) "$$test"; done
 
 test-host-sanitize:
 	$(MAKE) BUILD_DIR=$(BUILD_DIR)/sanitize \
