@@ -2,6 +2,10 @@
 #include "s3e_host_internal.h"
 
 #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 enum {
     DIRECTOR_FIXED_SLOT_OFFSET = 0x3e6490,
@@ -115,8 +119,8 @@ static float clamp_factor(float factor) {
 }
 
 static bool normalize_quaternion(struct quaternion *value) {
-    float length_squared = value->x * value->x + value->y * value->y + value->z * value->z +
-                           value->w * value->w;
+    float length_squared =
+        value->x * value->x + value->y * value->y + value->z * value->z + value->w * value->w;
     if (!isfinite(length_squared) || length_squared < 0.000001f) {
         return false;
     }
@@ -194,21 +198,15 @@ static void quaternion_to_matrix_rotation(const struct quaternion *value, float 
 }
 
 static void camera_position_from_view(const float *matrix, float *position) {
-    position[0] = -(matrix[0] * matrix[9] + matrix[1] * matrix[10] +
-                    matrix[2] * matrix[11]);
-    position[1] = -(matrix[3] * matrix[9] + matrix[4] * matrix[10] +
-                    matrix[5] * matrix[11]);
-    position[2] = -(matrix[6] * matrix[9] + matrix[7] * matrix[10] +
-                    matrix[8] * matrix[11]);
+    position[0] = -(matrix[0] * matrix[9] + matrix[1] * matrix[10] + matrix[2] * matrix[11]);
+    position[1] = -(matrix[3] * matrix[9] + matrix[4] * matrix[10] + matrix[5] * matrix[11]);
+    position[2] = -(matrix[6] * matrix[9] + matrix[7] * matrix[10] + matrix[8] * matrix[11]);
 }
 
 static void view_translation_from_camera_position(float *matrix, const float *position) {
-    matrix[9] = -(matrix[0] * position[0] + matrix[3] * position[1] +
-                  matrix[6] * position[2]);
-    matrix[10] = -(matrix[1] * position[0] + matrix[4] * position[1] +
-                   matrix[7] * position[2]);
-    matrix[11] = -(matrix[2] * position[0] + matrix[5] * position[1] +
-                   matrix[8] * position[2]);
+    matrix[9] = -(matrix[0] * position[0] + matrix[3] * position[1] + matrix[6] * position[2]);
+    matrix[10] = -(matrix[1] * position[0] + matrix[4] * position[1] + matrix[7] * position[2]);
+    matrix[11] = -(matrix[2] * position[0] + matrix[5] * position[1] + matrix[8] * position[2]);
 }
 
 static bool interpolate_view_matrix(const float *previous, const float *current, float factor,
@@ -235,10 +233,9 @@ static bool interpolate_view_matrix(const float *previous, const float *current,
     float dy = current_position[1] - before_position[1];
     float dz = current_position[2] - before_position[2];
     float distance_squared = dx * dx + dy * dy + dz * dz;
-    float rotation_dot = before_rotation.x * current_rotation.x +
-                         before_rotation.y * current_rotation.y +
-                         before_rotation.z * current_rotation.z +
-                         before_rotation.w * current_rotation.w;
+    float rotation_dot =
+        before_rotation.x * current_rotation.x + before_rotation.y * current_rotation.y +
+        before_rotation.z * current_rotation.z + before_rotation.w * current_rotation.w;
     if (!isfinite(distance_squared) || !isfinite(rotation_dot)) {
         return false;
     }
@@ -296,10 +293,10 @@ static struct camera_history *camera_history_for(void *camera, uint32_t step) {
     return replacement;
 }
 
-__attribute__((used, noinline)) static void submit_view_matrix(const float *matrix,
-                                                                uintptr_t return_address,
-                                                                void *camera) {
+__attribute__((used, noinline)) static void
+submit_view_matrix(const float *matrix, uintptr_t return_address, void *camera) {
     void *view_state = read_pointer(g_view_state_global, 0);
+    // The guest setter dereferences this state at +0x130, so a null state cannot be forwarded.
     if (!view_state || !matrix) {
         return;
     }
@@ -309,53 +306,55 @@ __attribute__((used, noinline)) static void submit_view_matrix(const float *matr
     uintptr_t camera_return = (uintptr_t)g_image_base + CAMERA_VIEW_RETURN_OFFSET;
     if (return_address == camera_return && camera) {
         ++codboz_frame_camera_views;
-        uint32_t step = g_fixed_step < INTERPOLATION_STEP_COUNT ? g_fixed_step : 0;
-        uint32_t generation = g_fixed_generations[step];
-        struct camera_history *history = camera_history_for(camera, step);
-        if (!history->initialized) {
-            memcpy(history->previous, matrix, sizeof(history->previous));
-            memcpy(history->current, matrix, sizeof(history->current));
-            history->generation = generation;
-            history->initialized = true;
-            ++codboz_frame_initial_views;
-            ++codboz_frame_snap_views;
-        } else if (generation - history->generation > 1u) {
-            memcpy(history->previous, matrix, sizeof(history->previous));
-            memcpy(history->current, matrix, sizeof(history->current));
-            history->generation = generation;
-            ++codboz_frame_stale_views;
-            ++codboz_frame_snap_views;
+        uint32_t step = g_fixed_step;
+        if (step >= INTERPOLATION_STEP_COUNT) {
+            ++codboz_frame_passthrough_views;
         } else {
-            if (history->generation != generation) {
-                memcpy(history->previous, history->current, sizeof(history->previous));
-                history->generation = generation;
-                ++codboz_frame_history_advances;
-            }
-            memcpy(history->current, matrix, sizeof(history->current));
-
-            float factor = g_fixed_step < INTERPOLATION_STEP_COUNT
-                               ? g_interpolation_factors[g_fixed_step]
-                               : 1.0f;
-            bool cut;
-            if (interpolate_view_matrix(history->previous, history->current, factor, interpolated,
-                                        &cut) &&
-                !cut) {
-                submitted = interpolated;
-                ++codboz_frame_interpolated_views;
-                if (!g_logged_active && factor > 0.0f && factor < 1.0f &&
-                    memcmp(interpolated, matrix, sizeof(interpolated)) != 0) {
-                    fprintf(stderr, "[frame-interpolation] camera interpolation active\n");
-                    g_logged_active = true;
-                }
-            } else {
+            uint32_t generation = g_fixed_generations[step];
+            struct camera_history *history = camera_history_for(camera, step);
+            if (!history->initialized) {
                 memcpy(history->previous, matrix, sizeof(history->previous));
                 memcpy(history->current, matrix, sizeof(history->current));
-                if (cut) {
-                    ++codboz_frame_cut_views;
-                } else {
-                    ++codboz_frame_invalid_views;
-                }
+                history->generation = generation;
+                history->initialized = true;
+                ++codboz_frame_initial_views;
                 ++codboz_frame_snap_views;
+            } else if (generation - history->generation > 1u) {
+                memcpy(history->previous, matrix, sizeof(history->previous));
+                memcpy(history->current, matrix, sizeof(history->current));
+                history->generation = generation;
+                ++codboz_frame_stale_views;
+                ++codboz_frame_snap_views;
+            } else {
+                if (history->generation != generation) {
+                    memcpy(history->previous, history->current, sizeof(history->previous));
+                    history->generation = generation;
+                    ++codboz_frame_history_advances;
+                }
+                memcpy(history->current, matrix, sizeof(history->current));
+
+                float factor = g_interpolation_factors[step];
+                bool cut;
+                if (interpolate_view_matrix(history->previous, history->current, factor,
+                                            interpolated, &cut) &&
+                    !cut) {
+                    submitted = interpolated;
+                    ++codboz_frame_interpolated_views;
+                    if (!g_logged_active && factor > 0.0f && factor < 1.0f &&
+                        memcmp(interpolated, matrix, sizeof(interpolated)) != 0) {
+                        fprintf(stderr, "[frame-interpolation] camera interpolation active\n");
+                        g_logged_active = true;
+                    }
+                } else {
+                    memcpy(history->previous, matrix, sizeof(history->previous));
+                    memcpy(history->current, matrix, sizeof(history->current));
+                    if (cut) {
+                        ++codboz_frame_cut_views;
+                    } else {
+                        ++codboz_frame_invalid_views;
+                    }
+                    ++codboz_frame_snap_views;
+                }
             }
         }
     } else {
@@ -384,9 +383,11 @@ static S3E_SOFTFP uint32_t director_fixed_callback(void *director, uint32_t chan
                                                    uint32_t value, uint32_t argument4,
                                                    uint32_t argument5) {
     if (channel == INTERPOLATION_CHANNEL) {
-        g_fixed_step = step;
         if (step < INTERPOLATION_STEP_COUNT) {
+            g_fixed_step = step;
             ++g_fixed_generations[step];
+        } else {
+            g_fixed_step = INTERPOLATION_STEP_COUNT;
         }
         ++codboz_frame_fixed_ticks;
     }
@@ -417,9 +418,8 @@ bool codboz_install_frame_interpolation(struct s3e_loaded_image *loaded) {
         0x1c, 0x30, 0x9f, 0xe5, 0x1c, 0x20, 0x9f, 0xe5,
     };
     static const uint8_t camera_callsite_signature[] = {
-        0x6c, 0x6b, 0x20, 0x46, 0x02, 0xf0, 0x57, 0xff,
-        0x04, 0xf1, 0x38, 0x00, 0xbe, 0xf1, 0x2e, 0xec,
-        0x19, 0xb0, 0xbd, 0xe8, 0xf0, 0x8f,
+        0x6c, 0x6b, 0x20, 0x46, 0x02, 0xf0, 0x57, 0xff, 0x04, 0xf1, 0x38,
+        0x00, 0xbe, 0xf1, 0x2e, 0xec, 0x19, 0xb0, 0xbd, 0xe8, 0xf0, 0x8f,
     };
     static const uint8_t matrix_copy_signature[] = {
         0xf0, 0xb5, 0x0d, 0x46, 0x06, 0x46, 0x0f, 0x46,
@@ -472,7 +472,7 @@ bool codboz_install_frame_interpolation(struct s3e_loaded_image *loaded) {
         g_interpolation_factors[i] = 1.0f;
     }
     memset(g_fixed_generations, 0, sizeof(g_fixed_generations));
-    g_fixed_step = 0;
+    g_fixed_step = INTERPOLATION_STEP_COUNT;
     g_history_serial = 0;
     g_logged_active = false;
     codboz_frame_fixed_ticks = 0;

@@ -2,10 +2,19 @@
 #include "s3e_host_internal.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/mman.h>
+
+#if defined(NDEBUG)
+#error "codboz_frame_interpolation_test requires assertions"
+#endif
 
 enum {
-    IMAGE_BASE = 0x4a000000,
     IMAGE_SIZE = 0x4b0000,
     DIRECTOR_FIXED_SLOT_OFFSET = 0x3e6490,
     DIRECTOR_INTERPOLATE_SLOT_OFFSET = 0x3e6494,
@@ -20,6 +29,7 @@ enum {
     CAMERA_TEST_TRAMPOLINE_OFFSET = 0x0bf5da,
     VIEW_STATE_MATRIX_OFFSET = 0x130,
     VIEW_MATRIX_FLOATS = 12,
+    INTERPOLATION_STEP_COUNT = 8,
 };
 
 typedef uint32_t(S3E_SOFTFP *director_callback_fn)(void *director, uint32_t channel, uint32_t step,
@@ -39,8 +49,6 @@ struct fixed_call_record {
 
 static uint32_t g_matrix_copy_calls;
 static uint32_t g_derived_update_calls;
-
-extern volatile uint32_t codboz_frame_history_advances;
 
 static uint32_t read32(const void *address) {
     uint32_t value;
@@ -110,8 +118,7 @@ static void write_arm_trampoline(uint8_t *base, size_t offset, uintptr_t target)
     assert(target <= UINT32_MAX);
     write32(base + offset, 0xe51ff004u);
     write32(base + offset + sizeof(uint32_t), (uint32_t)target);
-    __builtin___clear_cache((char *)base + offset,
-                            (char *)base + offset + 2 * sizeof(uint32_t));
+    __builtin___clear_cache((char *)base + offset, (char *)base + offset + 2 * sizeof(uint32_t));
 }
 
 static void initialize_image(uint8_t *base) {
@@ -125,9 +132,8 @@ static void initialize_image(uint8_t *base) {
         0x1c, 0x30, 0x9f, 0xe5, 0x1c, 0x20, 0x9f, 0xe5,
     };
     static const uint8_t camera_callsite_signature[] = {
-        0x6c, 0x6b, 0x20, 0x46, 0x02, 0xf0, 0x57, 0xff,
-        0x04, 0xf1, 0x38, 0x00, 0xbe, 0xf1, 0x2e, 0xec,
-        0x19, 0xb0, 0xbd, 0xe8, 0xf0, 0x8f,
+        0x6c, 0x6b, 0x20, 0x46, 0x02, 0xf0, 0x57, 0xff, 0x04, 0xf1, 0x38,
+        0x00, 0xbe, 0xf1, 0x2e, 0xec, 0x19, 0xb0, 0xbd, 0xe8, 0xf0, 0x8f,
     };
     static const uint8_t matrix_copy_signature[] = {
         0xf0, 0xb5, 0x0d, 0x46, 0x06, 0x46, 0x0f, 0x46,
@@ -138,6 +144,7 @@ static void initialize_image(uint8_t *base) {
         0xdc, 0x40, 0x9f, 0xe5, 0x53, 0xff, 0xff, 0xeb,
     };
 
+    uint32_t image_base = pointer32(base);
     memset(base, 0, IMAGE_SIZE);
     memcpy(base + (DIRECTOR_FIXED_CALLBACK_OFFSET & ~1u), fixed_signature, sizeof(fixed_signature));
     memcpy(base + (DIRECTOR_INTERPOLATE_CALLBACK_OFFSET & ~1u), interpolate_signature,
@@ -149,10 +156,10 @@ static void initialize_image(uint8_t *base) {
            sizeof(matrix_copy_signature));
     memcpy(base + VIEW_DERIVED_UPDATE_OFFSET, derived_update_signature,
            sizeof(derived_update_signature));
-    write32(base + DIRECTOR_FIXED_SLOT_OFFSET, IMAGE_BASE + DIRECTOR_FIXED_CALLBACK_OFFSET);
+    write32(base + DIRECTOR_FIXED_SLOT_OFFSET, image_base + DIRECTOR_FIXED_CALLBACK_OFFSET);
     write32(base + DIRECTOR_INTERPOLATE_SLOT_OFFSET,
-            IMAGE_BASE + DIRECTOR_INTERPOLATE_CALLBACK_OFFSET);
-    write32(base + VIEW_STATE_REFERENCE_OFFSET, IMAGE_BASE + VIEW_STATE_GLOBAL_OFFSET);
+            image_base + DIRECTOR_INTERPOLATE_CALLBACK_OFFSET);
+    write32(base + VIEW_STATE_REFERENCE_OFFSET, image_base + VIEW_STATE_GLOBAL_OFFSET);
 }
 
 static void install_test_stubs(uint8_t *base) {
@@ -226,14 +233,13 @@ static void assert_callback_behavior(uint8_t *base) {
         (director_callback_fn)(uintptr_t)read32(base + DIRECTOR_FIXED_SLOT_OFFSET);
     director_callback_fn interpolate =
         (director_callback_fn)(uintptr_t)read32(base + DIRECTOR_INTERPOLATE_SLOT_OFFSET);
-    view_setter_fn view_setter = (view_setter_fn)(uintptr_t)(IMAGE_BASE + VIEW_SETTER_OFFSET);
+    view_setter_fn view_setter = (view_setter_fn)(uintptr_t)(base + VIEW_SETTER_OFFSET);
     camera_test_fn submit_camera =
-        (camera_test_fn)(uintptr_t)(IMAGE_BASE + CAMERA_TEST_TRAMPOLINE_OFFSET + 1u);
+        (camera_test_fn)(uintptr_t)(base + CAMERA_TEST_TRAMPOLINE_OFFSET + 1u);
 
     install_test_stubs(base);
-    uint8_t view_state[0x260];
+    _Alignas(float) uint8_t view_state[0x260];
     memset(view_state, 0, sizeof(view_state));
-    write32(base + VIEW_STATE_GLOBAL_OFFSET, pointer32(view_state));
     float *submitted = (float *)(view_state + VIEW_STATE_MATRIX_OFFSET);
     float first[VIEW_MATRIX_FLOATS];
     float second[VIEW_MATRIX_FLOATS];
@@ -246,6 +252,10 @@ static void assert_callback_behavior(uint8_t *base) {
 
     g_matrix_copy_calls = 0;
     g_derived_update_calls = 0;
+    view_setter(other);
+    assert(g_matrix_copy_calls == 0 && g_derived_update_calls == 0);
+
+    write32(base + VIEW_STATE_GLOBAL_OFFSET, pointer32(view_state));
     view_setter(other);
     assert(memcmp(submitted, other, sizeof(other)) == 0);
     assert(g_matrix_copy_calls == 1 && g_derived_update_calls == 1);
@@ -306,15 +316,26 @@ static void assert_callback_behavior(uint8_t *base) {
     interpolate(&call, 1, 0, float_bits(0.5f), 0, 0);
     submit_camera(many_second, camera_both_steps);
     assert_float_close(submitted[9], -4.0f);
+
+    fixed(&call, 1, INTERPOLATION_STEP_COUNT, 0, 0, 0);
+    submit_camera(other, camera_both_steps);
+    assert(memcmp(submitted, other, sizeof(other)) == 0);
+    fixed(&call, 1, 0, 0, 0, 0);
+    interpolate(&call, 1, 0, float_bits(0.5f), 0, 0);
+    submit_camera(first, camera_both_steps);
+    assert_float_close(submitted[9], -4.0f);
+
     assert(codboz_frame_history_advances > 0);
-    assert(g_matrix_copy_calls == 106 && g_derived_update_calls == 106);
+    assert(g_matrix_copy_calls == 108 && g_derived_update_calls == 108);
 }
 
 int main(void) {
-    void *mapping =
-        mmap((void *)(uintptr_t)IMAGE_BASE, IMAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
-             MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-    assert(mapping == (void *)(uintptr_t)IMAGE_BASE);
+    void *mapping = mmap(NULL, IMAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
+                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (mapping == MAP_FAILED) {
+        fprintf(stderr, "failed to map the synthetic guest image: %s\n", strerror(errno));
+        return 1;
+    }
 
     uint8_t *base = mapping;
     initialize_image(base);
