@@ -14,13 +14,27 @@ mkdir -p "$control_dir" "$game_dir"
 
 printf 'directory=%q\nget_controls() { :; }\npm_show_error() { :; }\npm_finish() { :; }\n' \
   "${storage#/}" > "$control_dir/control.txt"
-cp packaging/ports/codboz/codboz/config.example.txt "$game_dir/config.example.txt"
+
+missing_defaults_output="$test_root/missing-defaults.txt"
+if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh \
+  >"$missing_defaults_output" 2>&1; then
+  echo "launcher unexpectedly succeeded without its configuration defaults" >&2
+  exit 1
+fi
+grep -q 'Missing Configuration Defaults.*config.defaults.txt is missing' "$missing_defaults_output"
+test ! -e "$game_dir/config.txt"
+
+cp packaging/ports/codboz/codboz/config.defaults.txt "$game_dir/config.defaults.txt"
 
 if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1; then
   echo "launcher unexpectedly succeeded without its loader" >&2
   exit 1
 fi
-cmp "$game_dir/config.example.txt" "$game_dir/config.txt"
+cmp "$game_dir/config.defaults.txt" "$game_dir/config.txt"
+grep -qx 'multiplayer_server=boz-online.xubi.org' "$game_dir/config.txt"
+grep -qx 'multiplayer_proxy=0' "$game_dir/config.txt"
+grep -qx 'voice_chat=1' "$game_dir/config.txt"
+grep -qx 'player_name=JeKaleVader' "$game_dir/config.txt"
 
 existing_config="$test_root/existing-config.txt"
 printf 'multiplayer_server=192.168.178.37\nmultiplayer_proxy=0' > "$existing_config"

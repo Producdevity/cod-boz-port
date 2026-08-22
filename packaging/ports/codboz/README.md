@@ -42,25 +42,29 @@ Press Select to switch between cursor mode and game mode.
 Local Wi-Fi does not use a server. One device hosts and the others join from
 the Local Wi-Fi menu.
 
-For Play Online, edit `ports/codboz/config.txt`:
+Play Online uses the settings in `ports/codboz/config.txt`:
 
 ```text
-multiplayer_server=server.example.org
+multiplayer_server=boz-online.xubi.org
 multiplayer_proxy=0
-voice_chat=0
-player_name=Player
+voice_chat=1
+player_name=JeKaleVader
 ```
 
-Everyone in a match must use the same server. Cross-play with the PS Vita port
-also works when both versions use `boz-online.xubi.org`. Leave
-`multiplayer_proxy=0`. Clear `multiplayer_server` to disable Play Online. Local
-Wi-Fi will continue to work.
+New installations default to `boz-online.xubi.org`, the server used by the PS
+Vita port, so Play Online supports cross-play without additional setup. Existing
+`config.txt` files are preserved during updates. Everyone in a match must use the
+same server. Leave `multiplayer_proxy=0`. Clear `multiplayer_server` to disable
+Play Online. Local Wi-Fi will continue to work.
 
-Set `voice_chat=1` to enable voice chat if your device and CFW exposes an ALSA
-capture device. If not, you'll need a supported USB microphone or audio adapter.
+Voice chat defaults to on so remote players can be heard. The game also attempts
+to open a microphone when `voice_chat=1`, but most Linux handhelds do not expose
+an ALSA capture device. Voice input on those systems requires a supported USB
+microphone or audio adapter. Set `voice_chat=0` to disable both playback and
+capture.
 
-`player_name` accepts up to 13 letters, numbers, spaces, hyphens, underscores or
-periods.
+The default player name is `JeKaleVader`. `player_name` accepts up to 13 letters,
+numbers, spaces, hyphens, underscores or periods.
 
 ## Testing
 
