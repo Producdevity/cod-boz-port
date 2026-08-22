@@ -53,7 +53,16 @@ if [ ! -f "$config" ]; then
     show_error "Missing Configuration Defaults" "The port install is incomplete: config.defaults.txt is missing."
     exit 1
   fi
-  cp "$config_defaults" "$config"
+  config_tmp="$(mktemp "$gamedir/config.txt.XXXXXX")" || {
+    show_error "Configuration Initialization Failed" "Could not create a temporary config file."
+    exit 1
+  }
+  if ! cp "$config_defaults" "$config_tmp" || ! chmod 644 "$config_tmp" ||
+    ! mv "$config_tmp" "$config"; then
+    rm -f "$config_tmp"
+    show_error "Configuration Initialization Failed" "Could not create config.txt from config.defaults.txt."
+    exit 1
+  fi
 fi
 
 has_game_data() {
