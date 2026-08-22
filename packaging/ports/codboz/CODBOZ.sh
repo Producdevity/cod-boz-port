@@ -31,20 +31,11 @@ setup_script="$gamedir/codboz_setup"
 s3e="$assetdir/boz.s3e.unpacked"
 savehome="$gamedir/savedata-home"
 config="$gamedir/config.txt"
-config_example="$gamedir/config.example.txt"
+config_defaults="$gamedir/config.defaults.txt"
 
 mkdir -p "$savehome" "$apkdir" "$assetdir"
 cd "$gamedir" || exit 1
 : > "$gamedir/log.txt" && exec > >(tee "$gamedir/log.txt") 2>&1
-
-# PortMaster overwrites packaged files during updates, so create the editable config once.
-if [ ! -f "$config" ]; then
-  if [ -f "$config_example" ]; then
-    cp "$config_example" "$config"
-  else
-    printf 'multiplayer_server=\nmultiplayer_proxy=0\nvoice_chat=0\nplayer_name=Player\n' > "$config"
-  fi
-fi
 
 show_error() {
   echo "ERROR: $1 - $2"
@@ -55,6 +46,15 @@ show_error() {
     sleep 8
   fi
 }
+
+# PortMaster overwrites packaged files during updates, so create the editable config once.
+if [ ! -f "$config" ]; then
+  if [ ! -f "$config_defaults" ]; then
+    show_error "Missing Configuration Defaults" "The port install is incomplete: config.defaults.txt is missing."
+    exit 1
+  fi
+  cp "$config_defaults" "$config"
+fi
 
 has_game_data() {
   [ -s "$s3e" ] && [ -s "$assetdir/blackops_etc.dz" ] && [ -s "$assetdir/blackops_gles1.dz" ]

@@ -124,7 +124,7 @@ executables=(
   "$package_dir/CODBOZ.sh"
 )
 files=(
-  "$payload/config.example.txt"
+  "$payload/config.defaults.txt"
   "$package_dir/gameinfo.xml"
   "$package_dir/cover.png"
   "$package_dir/screenshot.png"
@@ -168,7 +168,7 @@ scp "$payload/codboz_s3e_loader" "$host:$gamedir/codboz_s3e_loader.tmp"
 scp "$payload/codboz_apk_extract" "$host:$gamedir/codboz_apk_extract.tmp"
 scp "$payload/codboz_setup" "$host:$gamedir/codboz_setup.tmp"
 scp "$package_dir/CODBOZ.sh" "$host:$portdir/CODBOZ.sh.tmp"
-scp "$payload/config.example.txt" "$host:$gamedir/config.example.txt.tmp"
+scp "$payload/config.defaults.txt" "$host:$gamedir/config.defaults.txt.tmp"
 scp "$package_dir/gameinfo.xml" "$host:$gamedir/gameinfo.xml.tmp"
 scp "$package_dir/cover.png" "$host:$gamedir/cover.png.tmp"
 scp "$package_dir/screenshot.png" "$host:$gamedir/screenshot.png.tmp"
@@ -189,14 +189,14 @@ mv "$gamedir/codboz_s3e_loader.tmp" "$gamedir/codboz_s3e_loader"
 mv "$gamedir/codboz_apk_extract.tmp" "$gamedir/codboz_apk_extract"
 mv "$gamedir/codboz_setup.tmp" "$gamedir/codboz_setup"
 mv "$portdir/CODBOZ.sh.tmp" "$portdir/CODBOZ.sh"
-mv "$gamedir/config.example.txt.tmp" "$gamedir/config.example.txt"
+mv "$gamedir/config.defaults.txt.tmp" "$gamedir/config.defaults.txt"
 mv "$gamedir/gameinfo.xml.tmp" "$gamedir/gameinfo.xml"
 mv "$gamedir/cover.png.tmp" "$gamedir/cover.png"
 mv "$gamedir/screenshot.png.tmp" "$gamedir/screenshot.png"
 
 chmod 755 "$gamedir/codboz_s3e_loader" "$gamedir/codboz_apk_extract" \
   "$gamedir/codboz_setup" "$portdir/CODBOZ.sh"
-chmod 644 "$gamedir/config.example.txt" "$gamedir/gameinfo.xml" "$gamedir/cover.png" \
+chmod 644 "$gamedir/config.defaults.txt" "$gamedir/gameinfo.xml" "$gamedir/cover.png" \
   "$gamedir/screenshot.png" "$gamedir/licenses/"*.txt
 
 if [ ! -f "$gamedir/apk/game.apk" ]; then

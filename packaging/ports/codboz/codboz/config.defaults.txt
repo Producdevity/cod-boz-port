@@ -1,0 +1,4 @@
+multiplayer_server=boz-online.xubi.org
+multiplayer_proxy=0
+voice_chat=1
+player_name=JeKaleVader
