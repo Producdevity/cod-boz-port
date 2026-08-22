@@ -9,6 +9,7 @@ RUN set -eux; \
         gcc-arm-linux-gnueabihf \
         libc6-dev-armhf-cross \
         make \
+        qemu-user \
         zip; \
     rm -rf /var/lib/apt/lists/*
 

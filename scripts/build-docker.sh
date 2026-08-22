@@ -11,7 +11,7 @@ docker run --rm \
   -v "$PWD":/src \
   -w /src \
   "$image" \
-  make clean zip \
+  make clean test-arm zip \
     CC=arm-linux-gnueabihf-gcc \
     CFLAGS=-O2 \
     TARGET_CFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard"

@@ -1,5 +1,8 @@
 CC ?= gcc
 HOST_CC ?= cc
+ARM_CC ?= arm-linux-gnueabihf-gcc
+QEMU_ARM ?= qemu-arm
+ARM_SYSROOT ?= /usr/arm-linux-gnueabihf
 CLANG_FORMAT ?= clang-format
 SHELLCHECK ?= shellcheck
 HOST_TEST_CFLAGS ?= -O0 -g
@@ -25,18 +28,20 @@ HOST_TESTS := \
   $(BUILD_DIR)/tests/s3e_audio_test \
   $(BUILD_DIR)/tests/s3e_audio_unit_test \
   $(BUILD_DIR)/tests/s3e_input_test
+ARM_TESTS := $(BUILD_DIR)/tests/codboz_frame_interpolation_test
 CFLAGS ?= -O2 -g
 PROJECT_CPPFLAGS := -D_GNU_SOURCE -Iinclude -Ithird_party/lzma
 PROJECT_CFLAGS := -std=c11 -Wall -Wextra -Werror
 TARGET_CFLAGS ?=
 LDFLAGS ?=
-LOADER_LDLIBS += -ldl -pthread
+LOADER_LDLIBS += -ldl -pthread -lm
 FORMAT_FILES := $(shell find include src tests tools -type f \( -name '*.c' -o -name '*.h' \) | sort)
 SHELL_FILES := $(shell find scripts packaging tests -type f -name '*.sh' | sort) \
   packaging/ports/codboz/codboz/codboz_setup
 
 LOADER_SRC := \
   src/codboz_assets.c \
+  src/codboz_frame_interpolation.c \
   src/main.c \
   src/s3e_config.c \
   src/s3e_audio.c \
@@ -190,9 +195,20 @@ $(BUILD_DIR)/tests/s3e_input_test: tests/s3e_input_test.c src/s3e_input.c \
 	  -Ddlclose=s3e_input_test_dlclose $(HOST_TEST_CFLAGS) $(PROJECT_CFLAGS) \
 	  -o $@ tests/s3e_input_test.c src/s3e_input.c $(HOST_TEST_LDFLAGS)
 
+$(BUILD_DIR)/tests/codboz_frame_interpolation_test: \
+    tests/codboz_frame_interpolation_test.c src/codboz_frame_interpolation.c \
+    include/codboz_frame_interpolation.h include/s3e_host_internal.h include/s3e_image.h | \
+    $(BUILD_DIR)
+	mkdir -p $(dir $@)
+	$(ARM_CC) $(PROJECT_CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) $(TARGET_CFLAGS) \
+	  -o $@ tests/codboz_frame_interpolation_test.c src/codboz_frame_interpolation.c -lm
+
 test-host: $(HOST_TESTS)
 	@set -e; for test in $(HOST_TESTS); do "$$test"; done
 	tests/portmaster_launcher_test.sh
+
+test-arm: $(ARM_TESTS)
+	@set -e; for test in $(ARM_TESTS); do $(QEMU_ARM) -L $(ARM_SYSROOT) "$$test"; done
 
 test-host-sanitize:
 	$(MAKE) BUILD_DIR=$(BUILD_DIR)/sanitize \
@@ -201,4 +217,4 @@ test-host-sanitize:
 
 -include $(LOADER_OBJ:.o=.d)
 -include $(EXTRACT_OBJ:.o=.d)
-.PHONY: all check clean format format-check package shellcheck test-host test-host-sanitize zip
+.PHONY: all check clean format format-check package shellcheck test-arm test-host test-host-sanitize zip
