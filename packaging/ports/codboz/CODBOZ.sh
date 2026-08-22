@@ -59,9 +59,16 @@ if [ ! -f "$config" ]; then
   }
   trap 'rm -f "$config_tmp"' EXIT
   trap 'exit 1' HUP INT TERM
-  if ! cp "$config_defaults" "$config_tmp" || ! chmod 644 "$config_tmp" ||
-    ! mv "$config_tmp" "$config"; then
+  if ! cp "$config_defaults" "$config_tmp" || ! chmod 644 "$config_tmp"; then
     show_error "Configuration Initialization Failed" "Could not create config.txt from config.defaults.txt."
+    exit 1
+  fi
+  if ! ln "$config_tmp" "$config" 2>/dev/null && [ ! -f "$config" ]; then
+    show_error "Configuration Initialization Failed" "Could not install config.txt."
+    exit 1
+  fi
+  if ! rm -f "$config_tmp"; then
+    show_error "Configuration Initialization Failed" "Could not remove the temporary config file."
     exit 1
   fi
   config_tmp=
