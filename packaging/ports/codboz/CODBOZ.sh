@@ -48,7 +48,7 @@ show_error() {
 }
 
 # Invoked by the EXIT trap below.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 cleanup_config_init() {
   [ -n "${config_tmp:-}" ] && rm -f "$config_tmp"
   if [ "${config_lock_owned:-0}" -eq 1 ]; then
