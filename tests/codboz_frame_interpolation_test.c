@@ -313,7 +313,7 @@ static void assert_callback_behavior(uint8_t *base) {
     interpolate(&call, 0, 3, float_bits(0.0f), 0, 0);
     view_setter(other);
     assert(memcmp(submitted, other, sizeof(other)) == 0);
-    assert(g_matrix_copy_calls == 6 && g_derived_update_calls == 6);
+    assert(g_matrix_copy_calls == 8 && g_derived_update_calls == 8);
 
     float many_first[VIEW_MATRIX_FLOATS];
     float many_second[VIEW_MATRIX_FLOATS];
