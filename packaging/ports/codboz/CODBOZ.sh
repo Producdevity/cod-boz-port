@@ -57,12 +57,15 @@ if [ ! -f "$config" ]; then
     show_error "Configuration Initialization Failed" "Could not create a temporary config file."
     exit 1
   }
+  trap 'rm -f "$config_tmp"' EXIT
+  trap 'exit 1' HUP INT TERM
   if ! cp "$config_defaults" "$config_tmp" || ! chmod 644 "$config_tmp" ||
     ! mv "$config_tmp" "$config"; then
-    rm -f "$config_tmp"
     show_error "Configuration Initialization Failed" "Could not create config.txt from config.defaults.txt."
     exit 1
   fi
+  config_tmp=
+  trap - EXIT HUP INT TERM
 fi
 
 has_game_data() {

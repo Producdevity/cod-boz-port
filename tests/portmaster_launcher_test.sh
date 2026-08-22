@@ -26,6 +26,25 @@ test ! -e "$game_dir/config.txt"
 
 cp packaging/ports/codboz/codboz/config.defaults.txt "$game_dir/config.defaults.txt"
 
+failing_bin="$test_root/failing-bin"
+mkdir -p "$failing_bin"
+cat > "$failing_bin/cp" <<'FAILING_CP'
+#!/bin/sh
+printf 'partial config\n' > "$2"
+exit 1
+FAILING_CP
+chmod 755 "$failing_bin/cp"
+if PATH="$failing_bin:$PATH" XDG_DATA_HOME="$xdg_data" \
+  bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1; then
+  echo "launcher unexpectedly succeeded after a failed config copy" >&2
+  exit 1
+fi
+test ! -e "$game_dir/config.txt"
+if find "$game_dir" -maxdepth 1 -type f -name 'config.txt.*' -print -quit | grep -q .; then
+  echo "launcher left a temporary config file after a failed copy" >&2
+  exit 1
+fi
+
 if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1; then
   echo "launcher unexpectedly succeeded without its loader" >&2
   exit 1
