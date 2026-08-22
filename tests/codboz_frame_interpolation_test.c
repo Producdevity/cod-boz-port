@@ -219,12 +219,12 @@ static void identity_view(float *matrix, float x, float y, float z) {
     matrix[11] = z;
 }
 
-static void quarter_turn_view(float *matrix) {
+static void eighth_turn_view(float *matrix) {
     identity_view(matrix, 0.0f, 0.0f, 0.0f);
-    matrix[0] = 0.0f;
-    matrix[1] = 1.0f;
-    matrix[3] = -1.0f;
-    matrix[4] = 0.0f;
+    matrix[0] = 0.70710678f;
+    matrix[1] = 0.70710678f;
+    matrix[3] = -0.70710678f;
+    matrix[4] = 0.70710678f;
 }
 
 static void assert_float_close(float actual, float expected) {
@@ -253,12 +253,12 @@ static void assert_callback_behavior(uint8_t *base) {
     float second[VIEW_MATRIX_FLOATS];
     float other[VIEW_MATRIX_FLOATS];
     float cut[VIEW_MATRIX_FLOATS];
-    float quarter_turn[VIEW_MATRIX_FLOATS];
+    float eighth_turn[VIEW_MATRIX_FLOATS];
     identity_view(first, 0.0f, 0.0f, 0.0f);
     identity_view(second, -10.0f, 0.0f, 0.0f);
     identity_view(other, -20.0f, 3.0f, 4.0f);
     identity_view(cut, -1000.0f, 0.0f, 0.0f);
-    quarter_turn_view(quarter_turn);
+    eighth_turn_view(eighth_turn);
 
     g_matrix_copy_calls = 0;
     g_derived_update_calls = 0;
@@ -294,11 +294,11 @@ static void assert_callback_behavior(uint8_t *base) {
     submit_camera(first, rotation_camera);
     fixed(&call, 1, 2, 0, 0, 0);
     interpolate(&call, 1, 2, float_bits(0.5f), 0, 0);
-    submit_camera(quarter_turn, rotation_camera);
-    assert_float_close(submitted[0], 0.70710678f);
-    assert_float_close(submitted[1], 0.70710678f);
-    assert_float_close(submitted[3], -0.70710678f);
-    assert_float_close(submitted[4], 0.70710678f);
+    submit_camera(eighth_turn, rotation_camera);
+    assert_float_close(submitted[0], 0.92387953f);
+    assert_float_close(submitted[1], 0.38268343f);
+    assert_float_close(submitted[3], -0.38268343f);
+    assert_float_close(submitted[4], 0.92387953f);
 
     submit_camera(second, camera_two);
     assert(memcmp(submitted, second, sizeof(second)) == 0);
