@@ -70,6 +70,7 @@ volatile uint32_t codboz_frame_interpolated_views;
 volatile uint32_t codboz_frame_history_advances;
 volatile uint32_t codboz_frame_snap_views;
 volatile uint32_t codboz_frame_passthrough_views;
+volatile uint32_t codboz_frame_unsupported_step_views;
 volatile uint32_t codboz_frame_initial_views;
 volatile uint32_t codboz_frame_stale_views;
 volatile uint32_t codboz_frame_cut_views;
@@ -308,7 +309,7 @@ submit_view_matrix(const float *matrix, uintptr_t return_address, void *camera) 
         ++codboz_frame_camera_views;
         uint32_t step = g_fixed_step;
         if (step >= INTERPOLATION_STEP_COUNT) {
-            ++codboz_frame_passthrough_views;
+            ++codboz_frame_unsupported_step_views;
         } else {
             uint32_t generation = g_fixed_generations[step];
             struct camera_history *history = camera_history_for(camera, step);
@@ -481,6 +482,7 @@ bool codboz_install_frame_interpolation(struct s3e_loaded_image *loaded) {
     codboz_frame_history_advances = 0;
     codboz_frame_snap_views = 0;
     codboz_frame_passthrough_views = 0;
+    codboz_frame_unsupported_step_views = 0;
     codboz_frame_initial_views = 0;
     codboz_frame_stale_views = 0;
     codboz_frame_cut_views = 0;

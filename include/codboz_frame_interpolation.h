@@ -9,6 +9,7 @@ extern volatile uint32_t codboz_frame_interpolated_views;
 extern volatile uint32_t codboz_frame_history_advances;
 extern volatile uint32_t codboz_frame_snap_views;
 extern volatile uint32_t codboz_frame_passthrough_views;
+extern volatile uint32_t codboz_frame_unsupported_step_views;
 extern volatile uint32_t codboz_frame_initial_views;
 extern volatile uint32_t codboz_frame_stale_views;
 extern volatile uint32_t codboz_frame_cut_views;

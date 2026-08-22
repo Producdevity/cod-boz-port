@@ -219,6 +219,14 @@ static void identity_view(float *matrix, float x, float y, float z) {
     matrix[11] = z;
 }
 
+static void quarter_turn_view(float *matrix) {
+    identity_view(matrix, 0.0f, 0.0f, 0.0f);
+    matrix[0] = 0.0f;
+    matrix[1] = 1.0f;
+    matrix[3] = -1.0f;
+    matrix[4] = 0.0f;
+}
+
 static void assert_float_close(float actual, float expected) {
     assert(fabsf(actual - expected) < 0.0005f);
 }
@@ -245,10 +253,12 @@ static void assert_callback_behavior(uint8_t *base) {
     float second[VIEW_MATRIX_FLOATS];
     float other[VIEW_MATRIX_FLOATS];
     float cut[VIEW_MATRIX_FLOATS];
+    float quarter_turn[VIEW_MATRIX_FLOATS];
     identity_view(first, 0.0f, 0.0f, 0.0f);
     identity_view(second, -10.0f, 0.0f, 0.0f);
     identity_view(other, -20.0f, 3.0f, 4.0f);
     identity_view(cut, -1000.0f, 0.0f, 0.0f);
+    quarter_turn_view(quarter_turn);
 
     g_matrix_copy_calls = 0;
     g_derived_update_calls = 0;
@@ -278,6 +288,17 @@ static void assert_callback_behavior(uint8_t *base) {
     assert_float_close(submitted[9], -5.0f);
     assert_float_close(submitted[10], 0.0f);
     assert_float_close(submitted[11], 0.0f);
+
+    void *rotation_camera = (void *)(uintptr_t)0x12360000;
+    fixed(&call, 1, 2, 0, 0, 0);
+    submit_camera(first, rotation_camera);
+    fixed(&call, 1, 2, 0, 0, 0);
+    interpolate(&call, 1, 2, float_bits(0.5f), 0, 0);
+    submit_camera(quarter_turn, rotation_camera);
+    assert_float_close(submitted[0], 0.70710678f);
+    assert_float_close(submitted[1], 0.70710678f);
+    assert_float_close(submitted[3], -0.70710678f);
+    assert_float_close(submitted[4], 0.70710678f);
 
     submit_camera(second, camera_two);
     assert(memcmp(submitted, second, sizeof(second)) == 0);
@@ -317,16 +338,20 @@ static void assert_callback_behavior(uint8_t *base) {
     submit_camera(many_second, camera_both_steps);
     assert_float_close(submitted[9], -4.0f);
 
+    uint32_t passthrough_views = codboz_frame_passthrough_views;
+    uint32_t unsupported_step_views = codboz_frame_unsupported_step_views;
     fixed(&call, 1, INTERPOLATION_STEP_COUNT, 0, 0, 0);
     submit_camera(other, camera_both_steps);
     assert(memcmp(submitted, other, sizeof(other)) == 0);
+    assert(codboz_frame_passthrough_views == passthrough_views);
+    assert(codboz_frame_unsupported_step_views == unsupported_step_views + 1);
     fixed(&call, 1, 0, 0, 0, 0);
     interpolate(&call, 1, 0, float_bits(0.5f), 0, 0);
     submit_camera(first, camera_both_steps);
     assert_float_close(submitted[9], -4.0f);
 
     assert(codboz_frame_history_advances > 0);
-    assert(g_matrix_copy_calls == 108 && g_derived_update_calls == 108);
+    assert(g_matrix_copy_calls == 110 && g_derived_update_calls == 110);
 }
 
 int main(void) {
