@@ -63,7 +63,11 @@ while [ "$attempts" -lt 500 ]; do
 done
 exit 1
 BARRIER_CP
-chmod 755 "$concurrent_bin/cp"
+cat > "$concurrent_bin/ln" <<'UNSUPPORTED_LN'
+#!/bin/sh
+exit 1
+UNSUPPORTED_LN
+chmod 755 "$concurrent_bin/cp" "$concurrent_bin/ln"
 
 concurrent_pids=()
 for instance in 1 2; do
@@ -92,6 +96,7 @@ if find "$game_dir" -maxdepth 1 -type f -name 'config.txt.*' -print -quit | grep
   echo "concurrent launchers left a temporary config file" >&2
   exit 1
 fi
+test ! -e "$game_dir/config.txt.lock"
 
 if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh >/dev/null 2>&1; then
   echo "launcher unexpectedly succeeded without its loader" >&2

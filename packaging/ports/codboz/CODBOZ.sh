@@ -47,6 +47,15 @@ show_error() {
   fi
 }
 
+# Invoked by the EXIT trap below.
+# shellcheck disable=SC2329
+cleanup_config_init() {
+  [ -n "${config_tmp:-}" ] && rm -f "$config_tmp"
+  if [ "${config_lock_owned:-0}" -eq 1 ]; then
+    rmdir "$config_lock" 2>/dev/null || true
+  fi
+}
+
 # PortMaster overwrites packaged files during updates, so create the editable config once.
 if [ ! -f "$config" ]; then
   if [ ! -f "$config_defaults" ]; then
@@ -57,17 +66,45 @@ if [ ! -f "$config" ]; then
     show_error "Configuration Initialization Failed" "Could not create a temporary config file."
     exit 1
   }
-  trap 'rm -f "$config_tmp"' EXIT
+  config_lock=
+  config_lock_owned=0
+  trap cleanup_config_init EXIT
   trap 'exit 1' HUP INT TERM
   if ! cp "$config_defaults" "$config_tmp" || ! chmod 644 "$config_tmp"; then
     show_error "Configuration Initialization Failed" "Could not create config.txt from config.defaults.txt."
     exit 1
   fi
   if ! ln "$config_tmp" "$config" 2>/dev/null && [ ! -f "$config" ]; then
-    show_error "Configuration Initialization Failed" "Could not install config.txt."
-    exit 1
+    # FAT32 and exFAT do not support hard links, so serialize a rename fallback.
+    config_lock="$gamedir/config.txt.lock"
+    config_lock_attempts=0
+    while [ ! -f "$config" ]; do
+      if mkdir "$config_lock" 2>/dev/null; then
+        config_lock_owned=1
+        break
+      fi
+      config_lock_attempts=$((config_lock_attempts + 1))
+      if [ "$config_lock_attempts" -ge 200 ]; then
+        show_error "Configuration Initialization Failed" "Timed out waiting to install config.txt."
+        exit 1
+      fi
+      sleep 0.05
+    done
+    if [ "$config_lock_owned" -eq 1 ]; then
+      if [ ! -f "$config" ] && ! mv "$config_tmp" "$config"; then
+        show_error "Configuration Initialization Failed" "Could not install config.txt."
+        exit 1
+      fi
+      config_tmp=
+      if ! rmdir "$config_lock"; then
+        show_error "Configuration Initialization Failed" "Could not remove the configuration lock."
+        exit 1
+      fi
+      config_lock_owned=0
+      config_lock=
+    fi
   fi
-  if ! rm -f "$config_tmp"; then
+  if [ -n "$config_tmp" ] && ! rm -f "$config_tmp"; then
     show_error "Configuration Initialization Failed" "Could not remove the temporary config file."
     exit 1
   fi
