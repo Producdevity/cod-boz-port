@@ -84,13 +84,18 @@ numbers, spaces, hyphens, underscores or periods.
 
 ## Deploy
 
-After building, deploy the staged package to a PortMaster device reachable over SSH:
+After building, run the deploy script for the operating system on your PortMaster
+device. The OS-specific scripts use `scripts/deploy.sh` internally; do not run
+`scripts/deploy.sh` directly.
 
 ```bash
 scripts/deploy-muos.sh <ssh-host>
 scripts/deploy-knulli.sh <ssh-host>
 scripts/deploy-darkos.sh <ssh-host>
+scripts/deploy-rocknix.sh <ssh-host>
 ```
+
+Replace `<ssh-host>` with the device's hostname or IP address.
 
 The muOS script defaults to `/mnt/mmc` and also supports `--sdcard`.
 
@@ -98,5 +103,7 @@ The KNULLI script defaults to KNULLI's active storage (`/userdata/roms`).
 It also supports `--share`, `--roms`, and `--root PATH`.
 
 The dArkOS/ArkOS script defaults to `/roms` and also supports `--roms2` and `--root PATH`.
+
+The ROCKNIX script defaults to `/storage/roms` and also supports `--root PATH`.
 
 The deployment scripts install from the staged package tree. Run `scripts/build-docker.sh` first.
