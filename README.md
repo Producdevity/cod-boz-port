@@ -93,6 +93,7 @@ scripts/deploy-muos.sh <ssh-host>
 scripts/deploy-knulli.sh <ssh-host>
 scripts/deploy-darkos.sh <ssh-host>
 scripts/deploy-rocknix.sh <ssh-host>
+scripts/deploy-amberelec.sh <ssh-host>
 ```
 
 Replace `<ssh-host>` with the device's hostname or IP address.
@@ -105,5 +106,7 @@ It also supports `--share`, `--roms`, and `--root PATH`.
 The dArkOS/ArkOS script defaults to `/roms` and also supports `--roms2` and `--root PATH`.
 
 The ROCKNIX script defaults to `/storage/roms` and also supports `--root PATH`.
+
+The AmberELEC script defaults to `/storage/roms` and also supports `--root PATH`.
 
 The deployment scripts install from the staged package tree. Run `scripts/build-docker.sh` first.
