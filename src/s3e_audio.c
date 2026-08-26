@@ -9,6 +9,8 @@ enum {
     MIX_MAX_VOLUME = 128,
     S3E_MAX_VOLUME = 256,
     SOUND_CHANNELS = 24,
+    AUDIO_CHANNELS = 2,
+    MIXER_CHANNELS = SOUND_CHANNELS + AUDIO_CHANNELS,
     AUDIO_STATUS_STOPPED = 0,
     AUDIO_STATUS_PLAYING = 1,
     AUDIO_STATUS_PAUSED = 2,
@@ -103,15 +105,6 @@ struct sdl_mixer_api {
     int (*Volume)(int channel, int volume);
     void *(*LoadWAV_RW)(void *src, int freesrc);
     void (*FreeChunk)(void *chunk);
-    void *(*LoadMUS)(const char *file);
-    void *(*LoadMUS_RW)(void *src, int freesrc);
-    int (*PlayMusic)(void *music, int loops);
-    int (*PlayingMusic)(void);
-    int (*HaltMusic)(void);
-    void (*PauseMusic)(void);
-    void (*ResumeMusic)(void);
-    int (*VolumeMusic)(int volume);
-    void (*FreeMusic)(void *music);
     int (*QuerySpec)(int *frequency, uint16_t *format, int *channels);
     void (*SetPostMix)(void (*callback)(void *user_data, uint8_t *stream, int length),
                        void *user_data);
@@ -140,8 +133,8 @@ struct sound_slot {
 };
 
 struct audio_slot {
-    void *music;
-    uint8_t *buffer;
+    void *chunk;
+    atomic_int finished;
     int volume_s3e;
     int volume_mix;
     int paused;
@@ -152,15 +145,16 @@ static void *g_sdl_mixer;
 static struct sdl_audio_api g_sdl_audio;
 static struct sdl_mixer_api g_mixer;
 static struct sound_slot g_sound_slots[SOUND_CHANNELS];
-static struct audio_slot g_audio_slot;
+static struct audio_slot g_audio_slots[AUDIO_CHANNELS];
 static struct sound_callback g_audio_callbacks[S3E_AUDIO_CALLBACK_COUNT];
 static int g_audio_tried;
 static int g_audio_ready;
+static int g_audio_channel;
 static int g_sound_volume_s3e = S3E_MAX_VOLUME;
 static int g_sound_volume_mix = MIX_MAX_VOLUME;
 static int g_sound_rate = SOUND_RATE_DEFAULT;
 static int g_mixer_mp3_ready;
-static int g_audio_slot_initialized;
+static int g_audio_slots_initialized;
 static int g_sound_slots_initialized;
 static audio_unit_callback_fn g_audio_unit_capture_callback;
 static audio_unit_callback_fn g_audio_unit_render_callback;
@@ -238,6 +232,14 @@ static int sound_channel_valid(int channel) {
     return channel >= 0 && channel < SOUND_CHANNELS;
 }
 
+static int audio_channel_valid(int channel) {
+    return channel >= 0 && channel < AUDIO_CHANNELS;
+}
+
+static int audio_mixer_channel(int channel) {
+    return SOUND_CHANNELS + channel;
+}
+
 static int16_t clamp_s16(int value) {
     if (value < INT16_MIN) {
         return INT16_MIN;
@@ -271,13 +273,15 @@ static void init_sound_slots(void) {
     g_sound_slots_initialized = 1;
 }
 
-static void init_audio_slot(void) {
-    if (g_audio_slot_initialized) {
+static void init_audio_slots(void) {
+    if (g_audio_slots_initialized) {
         return;
     }
-    g_audio_slot.volume_s3e = S3E_MAX_VOLUME;
-    g_audio_slot.volume_mix = MIX_MAX_VOLUME;
-    g_audio_slot_initialized = 1;
+    for (int channel = 0; channel < AUDIO_CHANNELS; ++channel) {
+        g_audio_slots[channel].volume_s3e = S3E_MAX_VOLUME;
+        g_audio_slots[channel].volume_mix = MIX_MAX_VOLUME;
+    }
+    g_audio_slots_initialized = 1;
 }
 
 static int rate_from_scale(int scale) {
@@ -443,19 +447,27 @@ static void free_sound_slot(int channel) {
     slot->loop_index = 0;
 }
 
-static void free_audio_slot(void) {
-    if (g_audio_slot.music && g_mixer.FreeMusic) {
-        g_mixer.FreeMusic(g_audio_slot.music);
+static void free_audio_slot(int channel) {
+    if (!audio_channel_valid(channel)) {
+        return;
     }
-    g_audio_slot.music = NULL;
-    free(g_audio_slot.buffer);
-    g_audio_slot.buffer = NULL;
-    g_audio_slot.paused = 0;
+    struct audio_slot *slot = &g_audio_slots[channel];
+    if (slot->chunk && g_mixer.FreeChunk) {
+        g_mixer.FreeChunk(slot->chunk);
+    }
+    slot->chunk = NULL;
+    atomic_store_explicit(&slot->finished, 0, memory_order_release);
+    slot->paused = 0;
 }
 
 static void mixer_channel_finished(int channel) {
     if (sound_channel_valid(channel)) {
         atomic_store_explicit(&g_sound_slots[channel].finished, 1, memory_order_release);
+        return;
+    }
+    int audio_channel = channel - SOUND_CHANNELS;
+    if (audio_channel_valid(audio_channel)) {
+        atomic_store_explicit(&g_audio_slots[audio_channel].finished, 1, memory_order_release);
     }
 }
 
@@ -581,15 +593,6 @@ static int audio_open(void) {
     ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.Volume, "Mix_Volume");
     ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.LoadWAV_RW, "Mix_LoadWAV_RW");
     ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.FreeChunk, "Mix_FreeChunk");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.LoadMUS, "Mix_LoadMUS");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.LoadMUS_RW, "Mix_LoadMUS_RW");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.PlayMusic, "Mix_PlayMusic");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.PlayingMusic, "Mix_PlayingMusic");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.HaltMusic, "Mix_HaltMusic");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.PauseMusic, "Mix_PauseMusic");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.ResumeMusic, "Mix_ResumeMusic");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.VolumeMusic, "Mix_VolumeMusic");
-    ok &= load_symbol(g_sdl_mixer, (void **)&g_mixer.FreeMusic, "Mix_FreeMusic");
     load_optional_symbol(g_sdl_mixer, (void **)&g_mixer.QuerySpec, "Mix_QuerySpec");
     load_optional_symbol(g_sdl_mixer, (void **)&g_mixer.SetPostMix, "Mix_SetPostMix");
     load_optional_symbol(g_sdl_mixer, (void **)&g_mixer.GetError, "Mix_GetError");
@@ -610,18 +613,20 @@ static int audio_open(void) {
         return 0;
     }
 
-    if (g_mixer.AllocateChannels(SOUND_CHANNELS) != SOUND_CHANNELS) {
+    if (g_mixer.AllocateChannels(MIXER_CHANNELS) != MIXER_CHANNELS) {
         fprintf(stderr, "[audio] SDL mixer channel allocation failed\n");
         g_mixer.CloseAudio();
         return 0;
     }
     g_mixer.ChannelFinished(mixer_channel_finished);
-    init_audio_slot();
+    init_audio_slots();
     init_sound_slots();
     for (int channel = 0; channel < SOUND_CHANNELS; ++channel) {
         g_mixer.Volume(channel, mixed_sound_volume(&g_sound_slots[channel]));
     }
-    g_mixer.VolumeMusic(g_audio_slot.volume_mix);
+    for (int channel = 0; channel < AUDIO_CHANNELS; ++channel) {
+        g_mixer.Volume(audio_mixer_channel(channel), g_audio_slots[channel].volume_mix);
+    }
     if (!g_mixer_mp3_ready) {
         fprintf(stderr, "[audio] MP3 decoder not reported by SDL2_mixer\n");
     }
@@ -629,28 +634,40 @@ static int audio_open(void) {
     return 1;
 }
 
-static void notify_audio_stopped(void) {
-    int32_t system_data = 0;
+static void notify_audio_stopped(int channel) {
+    int32_t system_data = channel;
     invoke_callback(&g_audio_callbacks[S3E_AUDIO_STOP], &system_data);
 }
 
-static void stop_audio(int notify) {
-    int had_audio = g_audio_slot.music != NULL;
+static void stop_audio_channel(int channel, int notify) {
+    struct audio_slot *slot = &g_audio_slots[channel];
+    int had_audio = slot->chunk != NULL;
     if (g_audio_ready && had_audio) {
-        g_mixer.HaltMusic();
+        g_mixer.HaltChannel(audio_mixer_channel(channel));
     }
-    free_audio_slot();
+    free_audio_slot(channel);
     if (notify && had_audio) {
-        notify_audio_stopped();
+        notify_audio_stopped(channel);
     }
 }
 
 static void service_finished_audio(void) {
-    if (!g_audio_ready || !g_audio_slot.music || g_mixer.PlayingMusic()) {
+    if (!g_audio_ready) {
         return;
     }
-    free_audio_slot();
-    notify_audio_stopped();
+    for (int channel = 0; channel < AUDIO_CHANNELS; ++channel) {
+        struct audio_slot *slot = &g_audio_slots[channel];
+        if (!slot->chunk) {
+            continue;
+        }
+        int mixer_channel = audio_mixer_channel(channel);
+        if (!atomic_load_explicit(&slot->finished, memory_order_acquire) &&
+            g_mixer.Playing(mixer_channel) != 0) {
+            continue;
+        }
+        free_audio_slot(channel);
+        notify_audio_stopped(channel);
+    }
 }
 
 static int resolve_audio_path(const char *name, char *out, size_t out_size) {
@@ -827,37 +844,69 @@ void audio_unit_backend_shutdown(void) {
     g_audio_unit_render_callback = NULL;
 }
 
+static uint8_t *read_audio_file(const char *path, uint32_t *out_size) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        return NULL;
+    }
+    struct stat st;
+    if (fstat(fd, &st) != 0 || st.st_size <= 0 || st.st_size > INT32_MAX) {
+        close(fd);
+        return NULL;
+    }
+
+    uint32_t size = (uint32_t)st.st_size;
+    uint8_t *data = malloc(size);
+    if (!data) {
+        close(fd);
+        return NULL;
+    }
+
+    uint32_t offset = 0;
+    while (offset < size) {
+        ssize_t count = read(fd, data + offset, size - offset);
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        if (count <= 0) {
+            free(data);
+            close(fd);
+            return NULL;
+        }
+        offset += (uint32_t)count;
+    }
+    close(fd);
+    *out_size = size;
+    return data;
+}
+
 static int play_audio_buffer(const void *buffer, uint32_t size, uint32_t repeat) {
     if (!buffer || size == 0 || size > INT32_MAX) {
         return 1;
     }
 
-    uint8_t *copy = malloc(size);
-    if (!copy) {
-        return 1;
-    }
-    memcpy(copy, buffer, size);
-
-    void *rw = g_sdl_audio.RWFromConstMem(copy, (int)size);
+    void *rw = g_sdl_audio.RWFromConstMem(buffer, (int)size);
     if (!rw) {
-        free(copy);
         return 1;
     }
 
-    stop_audio(1);
-    g_audio_slot.buffer = copy;
-    g_audio_slot.music = g_mixer.LoadMUS_RW(rw, 1);
-    if (!g_audio_slot.music) {
-        fprintf(stderr, "[audio] stream load failed: %s\n", mixer_error());
-        free_audio_slot();
+    int channel = g_audio_channel;
+    stop_audio_channel(channel, 1);
+    void *chunk = g_mixer.LoadWAV_RW(rw, 1);
+    if (!chunk) {
+        fprintf(stderr, "[audio] stream load failed on channel %d: %s\n", channel, mixer_error());
         return 1;
     }
 
-    g_audio_slot.paused = 0;
-    g_mixer.VolumeMusic(g_audio_slot.volume_mix);
-    if (g_mixer.PlayMusic(g_audio_slot.music, mixer_loops(repeat)) < 0) {
-        fprintf(stderr, "[audio] stream play failed: %s\n", mixer_error());
-        free_audio_slot();
+    struct audio_slot *slot = &g_audio_slots[channel];
+    int mixer_channel = audio_mixer_channel(channel);
+    slot->chunk = chunk;
+    atomic_store_explicit(&slot->finished, 0, memory_order_release);
+    slot->paused = 0;
+    g_mixer.Volume(mixer_channel, slot->volume_mix);
+    if (g_mixer.PlayChannelTimed(mixer_channel, chunk, mixer_loops(repeat), -1) < 0) {
+        fprintf(stderr, "[audio] stream play failed on channel %d: %s\n", channel, mixer_error());
+        free_audio_slot(channel);
         return 1;
     }
     return 0;
@@ -865,7 +914,9 @@ static int play_audio_buffer(const void *buffer, uint32_t size, uint32_t repeat)
 
 void audio_shutdown(void) {
     audio_unit_backend_shutdown();
-    stop_audio(0);
+    for (int channel = 0; channel < AUDIO_CHANNELS; ++channel) {
+        stop_audio_channel(channel, 0);
+    }
     memset(g_audio_callbacks, 0, sizeof(g_audio_callbacks));
     for (int channel = 0; channel < SOUND_CHANNELS; ++channel) {
         if (g_audio_ready && g_mixer.HaltChannel) {
@@ -896,7 +947,8 @@ void audio_shutdown(void) {
     g_audio_ready = 0;
     g_audio_tried = 0;
     g_mixer_mp3_ready = 0;
-    g_audio_slot_initialized = 0;
+    g_audio_channel = 0;
+    g_audio_slots_initialized = 0;
     g_sound_slots_initialized = 0;
     g_audio_pumping = 0;
 }
@@ -906,35 +958,39 @@ int32_t s3eAudioIsPlaying(void) {
 }
 
 int32_t s3eAudioSetInt(uint32_t key, int32_t value) {
-    init_audio_slot();
+    init_audio_slots();
     if (key == 0) {
-        g_audio_slot.volume_s3e = clamp_volume_256(value);
-        g_audio_slot.volume_mix = mix_volume_from_s3e(g_audio_slot.volume_s3e);
+        struct audio_slot *slot = &g_audio_slots[g_audio_channel];
+        slot->volume_s3e = clamp_volume_256(value);
+        slot->volume_mix = mix_volume_from_s3e(slot->volume_s3e);
         if (audio_open()) {
-            g_mixer.VolumeMusic(g_audio_slot.volume_mix);
+            g_mixer.Volume(audio_mixer_channel(g_audio_channel), slot->volume_mix);
         }
         return 0;
     }
-    if (key == 4 && value == 0) {
+    if (key == 4 && audio_channel_valid(value)) {
+        g_audio_channel = value;
         return 0;
     }
     return 1;
 }
 
 int32_t s3eAudioGetInt(uint32_t key) {
-    init_audio_slot();
+    init_audio_slots();
+    struct audio_slot *slot = &g_audio_slots[g_audio_channel];
     switch (key) {
     case 0:
-        return g_audio_slot.volume_s3e;
+        return slot->volume_s3e;
     case 1:
-        if (!audio_open() || !g_audio_slot.music || !g_mixer.PlayingMusic()) {
+        if (!audio_open() || !slot->chunk ||
+            !g_mixer.Playing(audio_mixer_channel(g_audio_channel))) {
             return AUDIO_STATUS_STOPPED;
         }
-        return g_audio_slot.paused ? AUDIO_STATUS_PAUSED : AUDIO_STATUS_PLAYING;
+        return slot->paused ? AUDIO_STATUS_PAUSED : AUDIO_STATUS_PLAYING;
     case 4:
-        return 0;
+        return g_audio_channel;
     case 5:
-        return 1;
+        return AUDIO_CHANNELS;
     case 6:
     case 9:
         return audio_open() ? 1 : 0;
@@ -954,20 +1010,19 @@ int32_t s3eAudioPlay(const char *filename, uint32_t repeat) {
         return 1;
     }
 
-    stop_audio(1);
-    g_audio_slot.music = g_mixer.LoadMUS(path);
-    if (!g_audio_slot.music) {
-        fprintf(stderr, "[audio] stream load failed: %s: %s\n", path, mixer_error());
+    uint32_t size = 0;
+    uint8_t *data = read_audio_file(path, &size);
+    if (!data) {
+        fprintf(stderr, "[audio] stream read failed: %s\n", path);
         return 1;
     }
-    g_audio_slot.paused = 0;
-    g_mixer.VolumeMusic(g_audio_slot.volume_mix);
-    if (g_mixer.PlayMusic(g_audio_slot.music, mixer_loops(repeat)) < 0) {
-        fprintf(stderr, "[audio] stream play failed: %s\n", mixer_error());
-        free_audio_slot();
-        return 1;
+    int channel = g_audio_channel;
+    int32_t result = play_audio_buffer(data, size, repeat);
+    free(data);
+    if (result == 0) {
+        fprintf(stderr, "[audio] stream channel=%d repeat=%u file=%s\n", channel, repeat, filename);
     }
-    return 0;
+    return result;
 }
 
 int32_t s3eAudioPlayFromBuffer(const void *buffer, uint32_t size, uint32_t repeat) {
@@ -979,23 +1034,29 @@ int32_t s3eAudioPlayFromBuffer(const void *buffer, uint32_t size, uint32_t repea
 
 int32_t s3eAudioStop(void) {
     if (audio_open()) {
-        stop_audio(1);
+        stop_audio_channel(g_audio_channel, 1);
     }
     return 0;
 }
 
 int32_t s3eAudioPause(void) {
-    if (audio_open() && g_audio_slot.music) {
-        g_mixer.PauseMusic();
-        g_audio_slot.paused = 1;
+    if (audio_open()) {
+        struct audio_slot *slot = &g_audio_slots[g_audio_channel];
+        if (slot->chunk) {
+            g_mixer.Pause(audio_mixer_channel(g_audio_channel));
+            slot->paused = 1;
+        }
     }
     return 0;
 }
 
 int32_t s3eAudioResume(void) {
-    if (audio_open() && g_audio_slot.music) {
-        g_mixer.ResumeMusic();
-        g_audio_slot.paused = 0;
+    if (audio_open()) {
+        struct audio_slot *slot = &g_audio_slots[g_audio_channel];
+        if (slot->chunk) {
+            g_mixer.Resume(audio_mixer_channel(g_audio_channel));
+            slot->paused = 0;
+        }
     }
     return 0;
 }
