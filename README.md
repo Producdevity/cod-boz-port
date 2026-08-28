@@ -94,6 +94,7 @@ scripts/deploy-knulli.sh <ssh-host>
 scripts/deploy-darkos.sh <ssh-host>
 scripts/deploy-rocknix.sh <ssh-host>
 scripts/deploy-amberelec.sh <ssh-host>
+scripts/deploy-spruce.sh <ssh-host>
 ```
 
 Replace `<ssh-host>` with the device's hostname or IP address.
@@ -108,5 +109,9 @@ The dArkOS/ArkOS script defaults to `/roms` and also supports `--roms2` and `--r
 The ROCKNIX script defaults to `/storage/roms` and also supports `--root PATH`.
 
 The AmberELEC script defaults to `/storage/roms` and also supports `--root PATH`.
+
+The SpruceOS script defaults to `/mnt/SDCARD/Roms/PORTS` and also supports `--root PATH`.
+SpruceOS is not an officially supported PortMaster platform, so port compatibility
+depends on the device and SpruceOS version.
 
 The deployment scripts install from the staged package tree. Run `scripts/build-docker.sh` first.

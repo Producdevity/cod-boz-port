@@ -5,10 +5,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 platform="${1:-}"
 if [ -z "$platform" ]; then
-  echo "Usage: $0 <muos|knulli|darkos|rocknix|amberelec> [--root PATH] <ssh-host>" >&2
+  echo "Usage: $0 <muos|knulli|darkos|rocknix|amberelec|spruce> [--root PATH] <ssh-host>" >&2
   exit 2
 fi
 shift
+
+payload_directory="ports"
 
 case "$platform" in
   muos)
@@ -36,6 +38,12 @@ case "$platform" in
     host="${CODBOZ_AMBERELEC_DEPLOY_HOST:-}"
     port_directory="ports"
     ;;
+  spruce)
+    target_root="${CODBOZ_SPRUCE_DEPLOY_ROOT:-/mnt/SDCARD/Roms/PORTS}"
+    host="${CODBOZ_SPRUCE_DEPLOY_HOST:-}"
+    payload_directory=""
+    port_directory=""
+    ;;
   *)
     echo "Unknown platform: $platform" >&2
     exit 2
@@ -58,6 +66,9 @@ usage() {
       ;;
     amberelec)
       echo "Usage: $0 amberelec [--storage|--root PATH] <ssh-host>" >&2
+      ;;
+    spruce)
+      echo "Usage: $0 spruce [--root PATH] <ssh-host>" >&2
       ;;
   esac
 }
@@ -122,8 +133,8 @@ fi
 
 package_dir="build/package/ports/codboz"
 payload="$package_dir/codboz"
-gamedir="$target_root/ports/codboz"
-portdir="$target_root/$port_directory"
+gamedir="$target_root${payload_directory:+/$payload_directory}/codboz"
+portdir="$target_root${port_directory:+/$port_directory}"
 
 executables=(
   "$payload/codboz_s3e_loader"
