@@ -28,6 +28,7 @@ assetdir="$gamedir/assets"
 apkdir="$gamedir/apk"
 loader="$gamedir/codboz_s3e_loader"
 setup_script="$gamedir/codboz_setup"
+runtime_script="$gamedir/codboz_runtime.sh"
 s3e="$assetdir/boz.s3e.unpacked"
 savehome="$gamedir/savedata-home"
 config="$gamedir/config.txt"
@@ -87,13 +88,15 @@ first_run_setup() {
 }
 
 require_executable "$loader" "Missing Loader" "The port install is incomplete: codboz_s3e_loader is missing."
+require_file "$runtime_script" "Missing Runtime Helper" "The port install is incomplete: codboz_runtime.sh is missing."
 
 if ! has_game_data; then
   first_run_setup
 fi
 
 if ! has_game_data; then
-  show_error "Setup Failed" "Check ports/codboz/setup.log, then launch again."
+  echo "ERROR: Setup failed. Check ports/codboz/setup.log, then launch again."
+  pm_finish
   exit 1
 fi
 
@@ -115,7 +118,7 @@ if command -v pm_platform_helper >/dev/null 2>&1; then
   pm_platform_helper "$loader"
 fi
 
-${TASKSET:-} "$loader" \
+${TASKSET:-} bash "$runtime_script" "$loader" \
   --root "$gamedir" \
   --display-size "${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}" \
   --run "$s3e" &

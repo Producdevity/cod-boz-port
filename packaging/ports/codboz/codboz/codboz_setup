@@ -24,6 +24,7 @@ gamedir="/$directory/ports/codboz"
 assetdir="$gamedir/assets"
 apkdir="$gamedir/apk"
 extractor="$gamedir/codboz_apk_extract"
+runtime_script="$gamedir/codboz_runtime.sh"
 apk="$apkdir/game.apk"
 s3e="$assetdir/boz.s3e.unpacked"
 setup_log="$gamedir/setup.log"
@@ -265,6 +266,7 @@ download_file() {
   fail "Checksum failed for $name after retrying."
 }
 
+require_file "$runtime_script" "Missing setup helper: codboz_runtime.sh."
 require_executable "$extractor" "Missing setup helper: codboz_apk_extract."
 require_file "$apk" "Missing APK. Place your Android APK at ports/codboz/apk/game.apk, then launch again."
 
@@ -282,7 +284,7 @@ fi
 verify_apk
 
 status "Extracting game APK..."
-if ! "$extractor" extract "$apk" "$assetdir" > "$extract_log" 2>&1; then
+if ! bash "$runtime_script" "$extractor" extract "$apk" "$assetdir" > "$extract_log" 2>&1; then
   cat "$extract_log"
   fail "Could not extract game.apk."
 fi
@@ -290,7 +292,7 @@ status "APK extraction complete."
 
 require_file "$s3e" "boz.s3e.unpacked was not created from game.apk."
 
-cdn_base="$("$extractor" print-cdn "$s3e")" || fail "Could not read the resource CDN from boz.s3e.unpacked."
+cdn_base="$(bash "$runtime_script" "$extractor" print-cdn "$s3e")" || fail "Could not read the resource CDN from boz.s3e.unpacked."
 if [ -z "$cdn_base" ]; then
   fail "Could not find the game resource CDN in game.apk."
 fi
