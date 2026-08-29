@@ -95,7 +95,7 @@ if ! has_game_data; then
 fi
 
 if ! has_game_data; then
-  echo "ERROR: Setup failed. Check ports/codboz/setup.log, then launch again."
+  show_error "Setup Failed" "Check ports/codboz/setup.log, then launch again."
   pm_finish
   exit 1
 fi

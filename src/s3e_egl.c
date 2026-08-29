@@ -317,7 +317,7 @@ static int sdl_owns_display(void) {
     const char *x11_display = getenv("DISPLAY");
     const char *video_driver = getenv("SDL_VIDEODRIVER");
     return (wayland_display && wayland_display[0]) || (x11_display && x11_display[0]) ||
-           (video_driver && video_driver[0]);
+           (video_driver && strcmp(video_driver, "kmsdrm") == 0);
 }
 
 static void apply_window_attributes(void) {

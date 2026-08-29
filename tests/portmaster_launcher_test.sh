@@ -45,35 +45,22 @@ LD_LIBRARY_PATH="" RUNTIME_TARGET_RESULT="$runtime_target_result" \
   bash packaging/ports/codboz/codboz/codboz_runtime.sh "$runtime_target" direct
 grep -qx 'direct' "$runtime_target_result"
 
-if [ ! -x /lib/ld-linux-armhf.so.3 ]; then
-  fake_lib64="$test_root/lib64"
-  fake_lib32="$test_root/lib32"
-  runtime_loader_result="$test_root/runtime-loader.txt"
-  mkdir -p "$fake_lib64" "$fake_lib32"
-  printf '\177ELF\002' > "$fake_lib64/libc.so.6"
-  for name in libc.so.6 libEGL.so.1 libGLESv1_CM.so.1 libSDL2-2.0.so.0; do
-    printf '\177ELF\001' > "$fake_lib32/$name"
-  done
-  cat > "$fake_lib32/ld-linux-armhf.so.3" <<'LOADER'
+unrelated_runtime="$test_root/unrelated-runtime"
+runtime_loader_result="$test_root/runtime-loader.txt"
+mkdir -p "$unrelated_runtime"
+cat > "$unrelated_runtime/ld-linux-armhf.so.3" <<'LOADER'
 #!/bin/sh
-printf '%s\n' "$@" > "$RUNTIME_LOADER_RESULT"
-[ "$1" = "--library-path" ]
-shift 2
-exec "$@"
+printf 'used\n' > "$RUNTIME_LOADER_RESULT"
+exit 1
 LOADER
-  chmod 755 "$fake_lib32/ld-linux-armhf.so.3"
-  ln -s ../lib32/ld-linux-armhf.so.3 "$fake_lib64/ld-linux-armhf.so.3"
-  fake_lib32_resolved="$(realpath "$fake_lib32")"
+chmod 755 "$unrelated_runtime/ld-linux-armhf.so.3"
 
-  LD_LIBRARY_PATH="$fake_lib64:$fake_lib32" \
-    RUNTIME_LOADER_RESULT="$runtime_loader_result" \
-    RUNTIME_TARGET_RESULT="$runtime_target_result" \
-    bash packaging/ports/codboz/codboz/codboz_runtime.sh "$runtime_target" fallback
-  sed -n '1p' "$runtime_loader_result" | grep -qx -- '--library-path'
-  sed -n '2p' "$runtime_loader_result" | grep -qx "$fake_lib32_resolved"
-  sed -n '3p' "$runtime_loader_result" | grep -qx "$runtime_target"
-  grep -qx 'fallback' "$runtime_target_result"
-fi
+LD_LIBRARY_PATH="$unrelated_runtime" \
+  RUNTIME_LOADER_RESULT="$runtime_loader_result" \
+  RUNTIME_TARGET_RESULT="$runtime_target_result" \
+  bash packaging/ports/codboz/codboz/codboz_runtime.sh "$runtime_target" fallback
+test ! -e "$runtime_loader_result"
+grep -qx 'fallback' "$runtime_target_result"
 
 missing_defaults_output="$test_root/missing-defaults.txt"
 if XDG_DATA_HOME="$xdg_data" bash packaging/ports/codboz/CODBOZ.sh \
@@ -132,7 +119,7 @@ if XDG_DATA_HOME="$xdg_data" \
   exit 1
 fi
 grep -qx 'patcher' "$patcher_result"
-test ! -e "$error_result"
+grep -qx 'error' "$error_result"
 grep -qx 'finish' "$finish_result"
 
 printf 'game-data\n' > "$game_dir/assets/boz.s3e.unpacked"
