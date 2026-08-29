@@ -65,9 +65,8 @@ chmod 755 "$test_runtime/ld-linux-armhf.so.3"
   export RUNTIME_TARGET_RESULT="$runtime_target_result"
   run_with_runtime "$test_runtime" "$runtime_target" runtime
 )
-test_runtime_resolved="$(realpath "$test_runtime")"
 sed -n '1p' "$runtime_loader_result" | grep -qx -- '--library-path'
-sed -n '2p' "$runtime_loader_result" | grep -qx "$test_runtime_resolved"
+test "$(sed -n '2p' "$runtime_loader_result")" -ef "$test_runtime"
 sed -n '3p' "$runtime_loader_result" | grep -qx "$runtime_target"
 sed -n '4p' "$runtime_loader_result" | grep -qx 'runtime'
 grep -qx 'runtime' "$runtime_target_result"
