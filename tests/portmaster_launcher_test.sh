@@ -45,8 +45,35 @@ LD_LIBRARY_PATH="" RUNTIME_TARGET_RESULT="$runtime_target_result" \
   bash packaging/ports/codboz/codboz/codboz_runtime.sh "$runtime_target" direct
 grep -qx 'direct' "$runtime_target_result"
 
-unrelated_runtime="$test_root/unrelated-runtime"
+# shellcheck source=packaging/ports/codboz/codboz/codboz_runtime.sh
+source packaging/ports/codboz/codboz/codboz_runtime.sh
+
+test_runtime="$test_root/test-runtime"
 runtime_loader_result="$test_root/runtime-loader.txt"
+mkdir -p "$test_runtime"
+cat > "$test_runtime/ld-linux-armhf.so.3" <<'LOADER'
+#!/bin/sh
+printf '%s\n' "$@" > "$RUNTIME_LOADER_RESULT"
+[ "$1" = "--library-path" ]
+shift 2
+exec "$@"
+LOADER
+chmod 755 "$test_runtime/ld-linux-armhf.so.3"
+
+(
+  export RUNTIME_LOADER_RESULT="$runtime_loader_result"
+  export RUNTIME_TARGET_RESULT="$runtime_target_result"
+  run_with_runtime "$test_runtime" "$runtime_target" runtime
+)
+test_runtime_resolved="$(realpath "$test_runtime")"
+sed -n '1p' "$runtime_loader_result" | grep -qx -- '--library-path'
+sed -n '2p' "$runtime_loader_result" | grep -qx "$test_runtime_resolved"
+sed -n '3p' "$runtime_loader_result" | grep -qx "$runtime_target"
+sed -n '4p' "$runtime_loader_result" | grep -qx 'runtime'
+grep -qx 'runtime' "$runtime_target_result"
+
+unrelated_runtime="$test_root/unrelated-runtime"
+unrelated_runtime_result="$test_root/unrelated-runtime.txt"
 mkdir -p "$unrelated_runtime"
 cat > "$unrelated_runtime/ld-linux-armhf.so.3" <<'LOADER'
 #!/bin/sh
@@ -56,10 +83,10 @@ LOADER
 chmod 755 "$unrelated_runtime/ld-linux-armhf.so.3"
 
 LD_LIBRARY_PATH="$unrelated_runtime" \
-  RUNTIME_LOADER_RESULT="$runtime_loader_result" \
+  RUNTIME_LOADER_RESULT="$unrelated_runtime_result" \
   RUNTIME_TARGET_RESULT="$runtime_target_result" \
   bash packaging/ports/codboz/codboz/codboz_runtime.sh "$runtime_target" fallback
-test ! -e "$runtime_loader_result"
+test ! -e "$unrelated_runtime_result"
 grep -qx 'fallback' "$runtime_target_result"
 
 missing_defaults_output="$test_root/missing-defaults.txt"
