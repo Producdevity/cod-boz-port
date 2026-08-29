@@ -312,10 +312,12 @@ static int uses_sdl(EGLDisplay display) {
     return g_sdl.active && (!display || display == g_sdl.display || display == fallback_display());
 }
 
-static int compositor_owns_display(void) {
+static int sdl_owns_display(void) {
     const char *wayland_display = getenv("WAYLAND_DISPLAY");
     const char *x11_display = getenv("DISPLAY");
-    return (wayland_display && wayland_display[0]) || (x11_display && x11_display[0]);
+    const char *video_driver = getenv("SDL_VIDEODRIVER");
+    return (wayland_display && wayland_display[0]) || (x11_display && x11_display[0]) ||
+           (video_driver && strcmp(video_driver, "kmsdrm") == 0);
 }
 
 static void apply_window_attributes(void) {
@@ -376,7 +378,7 @@ static void destroy_pending_context(void) {
 }
 
 static EGLDisplay host_eglGetDisplay(void *native_display) {
-    if (compositor_owns_display()) {
+    if (sdl_owns_display()) {
         return fallback_display();
     }
     EGLDisplay (*native)(void *) = lookup_egl("eglGetDisplay");
@@ -397,7 +399,7 @@ static EGLBoolean host_eglInitialize(EGLDisplay display, EGLint *major, EGLint *
             fprintf(stderr, "[egl] native EGL failed (0x%04x) and SDL fallback is unavailable\n",
                     native_error);
         } else {
-            fprintf(stderr, "[egl] compositor requires SDL, but SDL video is unavailable\n");
+            fprintf(stderr, "[egl] SDL video was requested but is unavailable\n");
         }
         return 0;
     }
@@ -411,7 +413,7 @@ static EGLBoolean host_eglInitialize(EGLDisplay display, EGLint *major, EGLint *
         fprintf(stderr, "[egl] native EGL failed (0x%04x); SDL owns the display surface\n",
                 native_error);
     } else {
-        fprintf(stderr, "[egl] compositor display uses an SDL window surface\n");
+        fprintf(stderr, "[egl] using an SDL window surface\n");
     }
     return 1;
 }
